@@ -54,6 +54,9 @@ class State(InputState, OutputState):
     classifier_metrics: Optional[Dict[str, float]] = None
     llm_labeled_count: int = 0
     classifier_labeled_count: int = 0
+    llm_relabel_count: int = 0
+    augmented_count: int = 0
     skipped_document_count: int = 0
     warnings: List[str] = field(default_factory=list)
-
+    sample_distribution: Optional[Dict[str, int]] = None
+    zero_sample_categories: List[str] = field(default_factory=list)

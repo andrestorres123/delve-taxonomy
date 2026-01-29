@@ -1,0 +1,374 @@
+---
+title: 'Handling Class Imbalance'
+description: 'Understanding and addressing imbalanced data in taxonomy classification'
+---
+
+<Info>
+This guide explains how class imbalance affects taxonomy classification and how to diagnose and address it using Delve's built-in tools and configuration options.
+</Info>
+
+## The Problem
+
+**Class imbalance** occurs when some categories in your taxonomy have significantly more documents than others. This is extremely common in real-world data:
+
+- Support tickets: 80% billing issues, 20% technical problems
+- Product reviews: 90% positive, 10% negative
+- Document types: 95% standard reports, 5% edge cases
+
+### Why Random Sampling Fails
+
+When you use random sampling with imbalanced data, rare categories get underrepresented or completely missed:
+
+| Category | % of Data | Expected in 100 Samples | Expected in 200 Samples |
+|----------|-----------|------------------------|------------------------|
+| Category A | 60% | 60 | 120 |
+| Category B | 30% | 30 | 60 |
+| Category C | 9% | 9 | 18 |
+| Category D | 0.8% | ~1 | ~2 |
+| Category E | 0.2% | 0 | 0 |
+
+With 100 random samples from data with this distribution, Category E would have **zero training examples**. The classifier simply cannot learn to recognize it.
+
+### What Happens Without Intervention
+
+1. **Zero-sample categories**: Some categories have no training examples
+2. **Weak classifiers**: Categories with 1-2 examples produce unreliable predictions
+3. **Overfitting to majority**: Model learns to always predict common categories
+4. **Poor F1 scores**: Test metrics look okay overall but hide per-class failures
+
+## How Delve Addresses It
+
+Delve provides three mechanisms to handle class imbalance:
+
+### 1. Built-in: Class-Weighted Training
+
+Delve's classifier automatically uses **class-weighted training** via scikit-learn's `balanced` class weights. This means:
+
+- Rare categories get higher weight during training
+- Errors on minority classes are penalized more heavily
+- The model doesn't completely ignore rare categories
+
+**Limitation**: Class weighting helps when you have at least a few examples per category. It cannot help with categories that have **zero** training examples.
+
+### 2. Sample Augmentation
+
+Use the `min_examples_per_category` parameter to guarantee minimum representation:
+
+```python
+from delve import Delve
+
+delve = Delve(
+    sample_size=100,
+    min_examples_per_category=5,  # Ensure at least 5 examples per category
+)
+```
+
+When enabled, Delve will:
+1. After initial LLM labeling, check category distribution
+2. For underrepresented categories, use embedding similarity to find likely candidates from the unlabeled pool
+3. Label those candidates with the LLM
+4. Add confirmed matches to the training set
+
+<Tip>
+Set `min_examples_per_category` to 3-5 for most use cases. Higher values improve classifier accuracy but increase LLM costs.
+</Tip>
+
+### 3. Confidence-Based Handling
+
+Use `classifier_confidence_threshold` to catch uncertain predictions:
+
+```python
+delve = Delve(
+    sample_size=100,
+    classifier_confidence_threshold=0.7,  # Handle predictions below 70% confidence
+    low_confidence_action="other",  # Label uncertain docs as "Other" (default)
+)
+```
+
+When the classifier's confidence for a document is below the threshold, Delve handles it according to `low_confidence_action`:
+
+| Action | Behavior | Cost |
+|--------|----------|------|
+| `"other"` (default) | Label as "Other" category | Free |
+| `"llm"` | Re-label with LLM (max 20 docs) | Medium |
+| `"keep"` | Keep classifier prediction | Free |
+
+<Tip>
+The default `"other"` action is recommended for most use cases. It's honest about uncertainty (the classifier truly doesn't know) and avoids expensive LLM calls.
+</Tip>
+
+<Warning>
+**Safeguard for `"llm"` action**: If more than 20 documents need re-labeling, Delve automatically falls back to `"other"` to prevent excessive LLM costs. For large datasets with significant imbalance, use `min_examples_per_category` instead.
+</Warning>
+
+## Diagnosing Imbalance
+
+Delve provides several diagnostic metrics to help you identify and understand imbalance issues.
+
+### Understanding the Metrics
+
+#### `sample_distribution`
+
+**What it is**: Count of documents per category in the training sample (LLM-labeled documents).
+
+**What to look for**: Categories with very low or zero counts.
+
+**How to act**: If a category has fewer than 3 samples, the classifier will struggle with it.
+
+```python
+result = delve.run_sync("data.csv", text_column="text")
+
+# Check sample distribution
+sample_dist = result.metadata.get("sample_distribution", {})
+for category, count in sorted(sample_dist.items(), key=lambda x: x[1]):
+    if count < 3:
+        print(f"Warning: '{category}' has only {count} training examples")
+```
+
+#### `zero_sample_categories`
+
+**What it is**: List of taxonomy categories with no training examples.
+
+**What to look for**: Any non-empty list indicates guaranteed blind spots.
+
+**How to act**: Increase `sample_size` or enable `min_examples_per_category`.
+
+```python
+zero_cats = result.metadata.get("zero_sample_categories", [])
+if zero_cats:
+    print(f"Categories with ZERO training examples:")
+    for cat in zero_cats:
+        print(f"  - {cat}")
+    print(f"\nConsider setting min_examples_per_category=5")
+```
+
+#### `per_class_f1`
+
+**What it is**: F1 score for each category on the classifier's test set.
+
+**What to look for**: Scores below 0.5, especially 0.0.
+
+**How to act**: Low F1 for specific categories means the classifier can't reliably predict them.
+
+```python
+metrics = result.metadata.get("classifier_metrics", {})
+per_class = metrics.get("per_class_f1", {})
+
+print("Per-class F1 scores:")
+for cat, f1 in sorted(per_class.items(), key=lambda x: x[1]):
+    status = "OK" if f1 >= 0.5 else "POOR"
+    print(f"  {cat}: {f1:.2f} [{status}]")
+```
+
+#### Aggregate Classifier Metrics
+
+**What it is**: Overall train/test accuracy and F1.
+
+**What to look for**: Large gap between training (high) and test (low) metrics.
+
+| Pattern | Meaning |
+|---------|---------|
+| Train: 1.0, Test: 0.9 | Healthy |
+| Train: 1.0, Test: 0.6 | Overfitting - likely imbalance |
+| Train: 0.95, Test: 0.5 | Severe overfitting - imbalance issue |
+
+```python
+metrics = result.metadata.get("classifier_metrics", {})
+if metrics:
+    train_f1 = metrics.get("train_f1", 0)
+    test_f1 = metrics.get("test_f1", 0)
+
+    if train_f1 > 0.9 and test_f1 < 0.7:
+        print(f"Warning: Train/test gap suggests overfitting")
+        print(f"  Train F1: {train_f1:.2f}")
+        print(f"  Test F1: {test_f1:.2f}")
+```
+
+### Reading the Warning Signs
+
+Watch for these patterns in your results:
+
+| Warning Sign | Likely Cause | Solution |
+|--------------|--------------|----------|
+| Categories with 0 samples | Extreme imbalance | Use `min_examples_per_category` |
+| Per-class F1 of 0.0 | Category never seen in training | Increase `sample_size` or use augmentation |
+| Train F1: 1.0, Test F1: < 0.7 | Overfitting to majority classes | Enable augmentation |
+| High overall F1 but poor results | Majority class dominates metrics | Check `per_class_f1` |
+
+## Tuning for Your Data
+
+### For Predefined Taxonomies
+
+When using a predefined taxonomy, you know your categories in advance. This is actually the harder case for imbalance because:
+
+- The taxonomy may include rare categories
+- You can't remove categories that don't appear in your data
+
+**Recommendations:**
+
+```python
+delve = Delve(
+    predefined_taxonomy="categories.json",
+    sample_size=200,  # Larger sample to catch rare categories
+    min_examples_per_category=3,  # Guarantee at least 3 per category
+    classifier_confidence_threshold=0.7,  # Handle uncertain predictions
+    low_confidence_action="other",  # Label uncertain as "Other"
+)
+```
+
+### For Discovered Taxonomies
+
+When Delve discovers the taxonomy, it creates categories based on what it sees in your sample. This naturally tends toward balance, but edge cases can still be missed.
+
+**Recommendations:**
+
+```python
+delve = Delve(
+    sample_size=150,
+    batch_size=50,  # More iterations = better coverage
+    max_num_clusters=10,
+    min_examples_per_category=3,
+)
+```
+
+### Cost vs. Accuracy Tradeoffs
+
+| Configuration | LLM Cost | Accuracy | Best For |
+|---------------|----------|----------|----------|
+| Default (`min_examples_per_category=0`) | Lowest | Variable | Balanced data |
+| `min_examples_per_category=3` | +10-30% | Improved | Moderate imbalance |
+| `min_examples_per_category=5` | +20-50% | Good | Significant imbalance |
+| `confidence_threshold=0.7` + `action="other"` | None | Honest uncertainty | Large datasets |
+| `confidence_threshold=0.7` + `action="llm"` | +0-5% | Better on edge cases | Small datasets, max 20 re-labels |
+| `min_examples_per_category=5` + `confidence_threshold` | +20-50% | Best | Highly imbalanced, accuracy-critical |
+
+## Example: Diagnosing and Fixing a Problem
+
+Here's a complete example showing how to diagnose and address imbalance issues:
+
+```python
+from delve import Delve, Verbosity
+
+# Step 1: Run with default settings and diagnose
+delve = Delve(
+    sample_size=100,
+    verbosity=Verbosity.NORMAL,
+)
+result = delve.run_sync("data.csv", text_column="text")
+
+# Step 2: Check for warning signs
+metrics = result.metadata.get("classifier_metrics", {})
+sample_dist = result.metadata.get("sample_distribution", {})
+zero_cats = result.metadata.get("zero_sample_categories", [])
+
+print("=== Imbalance Diagnostic ===\n")
+
+# Check for zero-sample categories
+if zero_cats:
+    print(f"ISSUE: {len(zero_cats)} categories have no training examples")
+    print(f"  Categories: {zero_cats}\n")
+
+# Check sample distribution
+print("Sample distribution:")
+for cat, count in sorted(sample_dist.items(), key=lambda x: x[1]):
+    flag = " [LOW]" if count < 3 else ""
+    print(f"  {cat}: {count}{flag}")
+
+# Check per-class F1
+per_class = metrics.get("per_class_f1", {})
+weak_categories = [cat for cat, f1 in per_class.items() if f1 < 0.5]
+if weak_categories:
+    print(f"\nISSUE: {len(weak_categories)} categories have weak F1 scores")
+    for cat in weak_categories:
+        print(f"  {cat}: {per_class[cat]:.2f}")
+
+# Step 3: Re-run with fixes if needed
+if zero_cats or weak_categories:
+    print("\n=== Re-running with imbalance fixes ===\n")
+
+    delve_fixed = Delve(
+        sample_size=200,  # Larger sample
+        min_examples_per_category=5,  # Guarantee coverage
+        classifier_confidence_threshold=0.7,  # Handle uncertain predictions
+        low_confidence_action="other",  # Label uncertain as "Other"
+        verbosity=Verbosity.NORMAL,
+    )
+    result_fixed = delve_fixed.run_sync("data.csv", text_column="text")
+
+    # Compare results
+    new_metrics = result_fixed.metadata.get("classifier_metrics", {})
+    print(f"\nImprovement:")
+    print(f"  Test F1: {metrics.get('test_f1', 0):.2f} -> {new_metrics.get('test_f1', 0):.2f}")
+    print(f"  Augmented samples: {result_fixed.metadata.get('augmented_count', 0)}")
+```
+
+## Best Practice: Keep "Other" in Your Taxonomy
+
+<Warning>
+**Don't try to infer "Other" from classifier confidence.** Always include an "Other" category in your taxonomy if you expect some documents won't fit your defined categories.
+</Warning>
+
+### Why This Matters
+
+You might think: "If the classifier is uncertain, the document probably doesn't fit any category, so label it as Other."
+
+This doesn't work well in practice. When the classifier has low confidence, it's usually uncertain **between valid categories** (e.g., "Planning" vs "General Questions"), not because the document doesn't fit any category.
+
+**Real-world test results:**
+
+| Approach | Full Dataset Accuracy | F1 (weighted) |
+|----------|----------------------|---------------|
+| "Other" inferred from low confidence | 44.9% | 58.5% |
+| "Other" in taxonomy (LLM-learned) | **89.0%** | **88.8%** |
+
+### The Right Approach
+
+Include "Other" in your taxonomy with a clear description:
+
+```python
+taxonomy = [
+    {"id": "1", "name": "Bug Report", "description": "Reports of software bugs"},
+    {"id": "2", "name": "Feature Request", "description": "Requests for new features"},
+    # ... other categories ...
+    {"id": "99", "name": "Other", "description": "Queries that don't fit any defined category, off-topic, or unclear"},
+]
+
+delve = Delve(
+    predefined_taxonomy=taxonomy,
+    min_examples_per_category=5,  # Helps find "Other" examples too
+)
+```
+
+The LLM learns what truly doesn't fit during the labeling phase, which is far more accurate than guessing from classifier confidence.
+
+## Understanding F1 Scores: Macro vs Weighted
+
+When evaluating your results, you'll see two F1 metrics:
+
+| Metric | What It Measures | When to Use |
+|--------|------------------|-------------|
+| **F1 Weighted** | Average F1, weighted by class support | Overall system performance |
+| **F1 Macro** | Unweighted average across all classes | Performance on rare categories |
+
+### Why Macro F1 Can Be Low
+
+If you have 15 categories and 5 of them have F1 = 0.0 (the classifier never predicts them correctly), your macro F1 will be dragged down significantly, even if the major categories perform well.
+
+**Example from real data:**
+- F1 Weighted: 88.8% (great overall performance)
+- F1 Macro: 36.0% (several rare categories have F1 = 0)
+
+<Tip>
+A large gap between weighted and macro F1 is a sign of class imbalance. The weighted score is dominated by majority classes, hiding poor performance on rare categories. Use `per_class_f1` to identify which specific categories are struggling.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Guide" icon="sliders" href="/configuration-guide">
+    Full parameter reference
+  </Card>
+  <Card title="How It Works" icon="gears" href="/how-it-works">
+    Understand the pipeline
+  </Card>
+</CardGroup>

@@ -21,6 +21,12 @@
         ]
       },
       {
+        "group": "Advanced Topics",
+        "pages": [
+          "class-imbalance"
+        ]
+      },
+      {
         "group": "CLI Usage",
         "pages": [
           "cli-reference"

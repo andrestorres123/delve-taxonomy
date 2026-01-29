@@ -193,38 +193,133 @@ delve = Delve(embedding_model="text-embedding-3-small")
 The difference in classifier accuracy between embedding models is usually small (1-3%). For most use cases, the default is fine.
 </Info>
 
-### `classifier_confidence_threshold` - LLM Fallback
+### `classifier_confidence_threshold` - Uncertainty Handling
 
-**What it controls:** When the classifier is uncertain, should it fall back to LLM labeling?
+**What it controls:** When to flag classifier predictions as uncertain.
 
 **How it works:**
 - Classifier outputs probability scores for each category
-- If the top probability is below the threshold, use LLM instead
-- `0.0` = Never fall back (use classifier for everything)
-- `0.8` = Fall back when classifier is < 80% confident
-
-**Tradeoffs:**
-
-| Threshold | Classifier Usage | LLM Fallback | Cost |
-|-----------|-----------------|--------------|------|
-| 0.0 (default) | 100% | 0% | Lowest |
-| 0.5 | ~85-95% | ~5-15% | Low |
-| 0.8 | ~60-80% | ~20-40% | Medium |
-| 0.95 | ~30-50% | ~50-70% | High |
+- If the top probability is below the threshold, the prediction is flagged as uncertain
+- What happens to uncertain predictions is controlled by `low_confidence_action`
+- `0.0` = Never flag (trust classifier for everything, default)
+- `0.7` = Flag predictions below 70% confidence
 
 ```python
 # Trust classifier completely (default)
 delve = Delve(classifier_confidence_threshold=0.0)
 
-# Use LLM for uncertain cases
-delve = Delve(classifier_confidence_threshold=0.7)
-
-# Prioritize accuracy over cost
-delve = Delve(classifier_confidence_threshold=0.85)
+# Flag uncertain predictions (below 70% confidence)
+delve = Delve(
+    classifier_confidence_threshold=0.7,
+    low_confidence_action="other",  # Label as "Other"
+)
 ```
 
 <Tip>
-Start with the default (0.0). If you notice miscategorized documents, try increasing the threshold to 0.6-0.8 to improve accuracy on edge cases.
+Start with the default (0.0). If you notice miscategorized documents, try increasing the threshold to 0.6-0.8 and using `low_confidence_action="other"` to be honest about uncertainty.
+</Tip>
+
+### `low_confidence_action` - What to Do with Uncertain Predictions
+
+**What it controls:** How to handle documents where the classifier's confidence is below the threshold.
+
+**Available options:**
+
+| Action | Behavior | Cost Impact |
+|--------|----------|-------------|
+| `"other"` (default) | Label as "Other" category | None |
+| `"llm"` | Re-label with LLM (max 20 docs) | Low-Medium |
+| `"keep"` | Keep the classifier's prediction | None |
+
+**How it works:**
+- Only applies when `classifier_confidence_threshold > 0`
+- `"other"`: Honest about uncertainty - the classifier doesn't know, so label as "Other"
+- `"llm"`: Re-label with LLM for better accuracy, but capped at 20 documents
+- `"keep"`: Accept the classifier's best guess despite low confidence
+
+```python
+# Label uncertain predictions as "Other" (recommended for large datasets)
+delve = Delve(
+    classifier_confidence_threshold=0.7,
+    low_confidence_action="other",
+)
+
+# Re-label with LLM (small datasets only, max 20 docs)
+delve = Delve(
+    classifier_confidence_threshold=0.7,
+    low_confidence_action="llm",
+)
+
+# Keep classifier predictions regardless of confidence
+delve = Delve(
+    classifier_confidence_threshold=0.7,
+    low_confidence_action="keep",
+)
+```
+
+<Warning>
+**Safeguard for `"llm"` action:** If more than 20 documents need re-labeling, Delve automatically falls back to `"other"` and logs a warning. This prevents unexpected costs on imbalanced datasets.
+</Warning>
+
+<Warning>
+**Don't use this as a replacement for "Other" in your taxonomy.** Low classifier confidence usually means uncertainty between valid categories, not that the document doesn't fit any category. In testing, inferring "Other" from confidence achieved only 45% accuracy vs 89% when "Other" was included in the taxonomy. See the [Class Imbalance guide](/class-imbalance#best-practice-keep-other-in-your-taxonomy) for details.
+</Warning>
+
+### `min_examples_per_category` - Sample Augmentation
+
+**What it controls:** Minimum number of training examples required per category.
+
+**How it works:**
+- After initial LLM labeling, Delve checks category distribution
+- For categories below the minimum, it finds similar documents using embedding search
+- Those candidates are labeled by LLM and added to the training set
+- `0` = Disabled (default)
+- `5` = Ensure at least 5 training examples per category
+
+**When to use:**
+- Your data has significant class imbalance
+- Some categories are rare (< 1% of data)
+- You're using a predefined taxonomy with many categories
+
+**Tradeoffs:**
+
+| Value | Effect | LLM Cost Increase |
+|-------|--------|-------------------|
+| 0 (default) | No augmentation | None |
+| 3 | Light balancing | +10-20% |
+| 5 | Moderate balancing | +20-40% |
+| 10 | Heavy balancing | +50-100% |
+
+```python
+# Disabled (default)
+delve = Delve(min_examples_per_category=0)
+
+# Ensure minimum coverage for imbalanced data
+delve = Delve(min_examples_per_category=5)
+
+# Aggressive balancing for highly skewed data
+delve = Delve(min_examples_per_category=10)
+```
+
+<Info>
+See the [Handling Class Imbalance](/class-imbalance) guide for a detailed explanation of when and how to use this parameter.
+</Info>
+
+### `sampling_strategy` - Sampling Mode
+
+**What it controls:** How documents are selected for the initial sample.
+
+**Available options:**
+- `random` (default) - Simple random sampling
+- `stratified` - Reserved for future use
+
+```python
+# Random sampling (default)
+delve = Delve(sampling_strategy="random")
+```
+
+<Tip>
+For handling imbalanced data, use `min_examples_per_category` rather than changing the sampling strategy. The sample augmentation approach is more effective because it uses embedding similarity to find good candidates.
 </Tip>
 
 ## Customization Parameters

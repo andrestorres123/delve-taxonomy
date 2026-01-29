@@ -103,7 +103,17 @@ class Configuration:
         default=0.0,
         metadata={
             "description": "Minimum confidence threshold for classifier predictions. "
-            "Documents below this threshold will be labeled by LLM. Set to 0 to disable LLM fallback."
+            "Documents below this threshold will be handled according to low_confidence_action. "
+            "Set to 0 to disable (default)."
+        },
+    )
+
+    low_confidence_action: str = field(
+        default="other",
+        metadata={
+            "description": "Action for low-confidence predictions: 'other' (label as Other), "
+            "'llm' (re-label with LLM, max 20 docs), or 'keep' (keep classifier prediction). "
+            "Default is 'other'."
         },
     )
 
@@ -111,6 +121,23 @@ class Configuration:
         default=5,
         metadata={
             "description": "Maximum number of clusters/categories to generate in the taxonomy."
+        },
+    )
+
+    min_examples_per_category: int = field(
+        default=0,
+        metadata={
+            "description": "Minimum training examples per category. "
+            "If a category has fewer samples, Delve will find more via embedding similarity. "
+            "Set to 0 to disable (default)."
+        },
+    )
+
+    sampling_strategy: str = field(
+        default="random",
+        metadata={
+            "description": "Sampling strategy: 'random' (default) or 'stratified'. "
+            "Stratified sampling balances the training set across categories."
         },
     )
 
@@ -168,6 +195,9 @@ class Configuration:
             "predefined_taxonomy": self.predefined_taxonomy,
             "embedding_model": self.embedding_model,
             "classifier_confidence_threshold": self.classifier_confidence_threshold,
+            "low_confidence_action": self.low_confidence_action,
             "max_num_clusters": self.max_num_clusters,
+            "min_examples_per_category": self.min_examples_per_category,
+            "sampling_strategy": self.sampling_strategy,
             "console": self.console,
         }

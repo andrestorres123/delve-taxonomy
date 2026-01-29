@@ -53,7 +53,10 @@ class Delve:
         predefined_taxonomy: Optional[Union[str, List[Dict[str, str]]]] = None,
         embedding_model: str = "text-embedding-3-large",
         classifier_confidence_threshold: float = 0.0,
+        low_confidence_action: str = "other",
         max_num_clusters: int = 5,
+        min_examples_per_category: int = 0,
+        sampling_strategy: str = "random",
     ):
         """Initialize Delve client.
 
@@ -76,8 +79,15 @@ class Delve:
                 When provided, skips the discovery phase and directly labels documents.
             embedding_model: OpenAI embedding model for classifier training (default: text-embedding-3-large)
             classifier_confidence_threshold: Minimum confidence for classifier predictions.
-                Documents below threshold are labeled by LLM (default: 0.0 = no fallback).
+                Documents below threshold are handled by low_confidence_action (default: 0.0 = disabled).
+            low_confidence_action: Action for low-confidence predictions: 'other' (label as Other),
+                'llm' (re-label with LLM, max 20 docs), or 'keep' (keep classifier prediction).
+                Default is 'other'.
             max_num_clusters: Maximum number of clusters/categories to generate (default: 5).
+            min_examples_per_category: Minimum training examples per category.
+                If a category has fewer samples, Delve will find more via embedding similarity.
+                Set to 0 to disable (default).
+            sampling_strategy: Sampling strategy: 'random' (default) or 'stratified'.
         """
         self.config = Configuration(
             model=model,
@@ -92,7 +102,10 @@ class Delve:
             predefined_taxonomy=predefined_taxonomy,
             embedding_model=embedding_model,
             classifier_confidence_threshold=classifier_confidence_threshold,
+            low_confidence_action=low_confidence_action,
             max_num_clusters=max_num_clusters,
+            min_examples_per_category=min_examples_per_category,
+            sampling_strategy=sampling_strategy,
         )
         self.console = self.config.get_console()
 

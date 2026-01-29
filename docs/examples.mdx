@@ -208,6 +208,59 @@ delve run langsmith://my-project --langsmith-key $LANGSMITH_API_KEY
 delve run data.csv --text-column text --sample-size 200 --use-case "Categorize support tickets"
 ```
 
+## Handling Imbalanced Data
+
+When your data has class imbalance (some categories much more common than others), you may need to adjust parameters to ensure good classifier performance.
+
+<CodeGroup>
+```python Diagnosing Imbalance
+from delve import Delve
+
+# Run Delve and check for imbalance issues
+delve = Delve(sample_size=100, output_dir="./results")
+result = delve.run_sync("data.csv", text_column="text")
+
+# Check classifier performance
+metrics = result.metadata.get("classifier_metrics", {})
+print(f"Test F1: {metrics.get('test_f1', 'N/A')}")
+
+# Check sample distribution
+sample_dist = result.metadata.get("sample_distribution", {})
+zero_cats = result.metadata.get("zero_sample_categories", [])
+
+if zero_cats:
+    print(f"Warning: {len(zero_cats)} categories had no training examples")
+    print(f"  Missing: {zero_cats}")
+
+# Check per-class performance
+per_class = metrics.get("per_class_f1", {})
+for cat, f1 in sorted(per_class.items(), key=lambda x: x[1]):
+    if f1 < 0.5:
+        print(f"  Low F1 ({f1:.2f}): {cat}")
+```
+
+```python Fixing Imbalance
+from delve import Delve
+
+# If you see imbalance issues, adjust parameters
+delve = Delve(
+    sample_size=200,  # More samples
+    min_examples_per_category=5,  # Guarantee coverage
+    classifier_confidence_threshold=0.7,  # LLM fallback for uncertain
+)
+result = delve.run_sync("data.csv", text_column="text")
+
+# Check improvements
+metrics = result.metadata.get("classifier_metrics", {})
+print(f"Improved Test F1: {metrics.get('test_f1', 'N/A')}")
+print(f"Augmented samples: {result.metadata.get('augmented_count', 0)}")
+```
+</CodeGroup>
+
+<Tip>
+See the [Handling Class Imbalance](/class-imbalance) guide for a complete explanation of these metrics and how to tune them.
+</Tip>
+
 ## Running Examples
 
 ```bash

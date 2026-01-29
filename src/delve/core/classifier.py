@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.utils import class_weight
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 from delve.state import Doc
 
@@ -110,6 +110,15 @@ def train_classifier(
         "train_f1": f1_score(y_train, train_preds, average="weighted"),
         "test_f1": f1_score(y_test, test_preds, average="weighted"),
     }
+
+    # Add per-class F1 scores for diagnosing imbalance issues
+    report = classification_report(y_test, test_preds, output_dict=True, zero_division=0)
+    per_class_f1 = {
+        index_to_category[int(k)]: v['f1-score']
+        for k, v in report.items()
+        if k.isdigit()
+    }
+    metrics["per_class_f1"] = per_class_f1
 
     return model, index_to_category, metrics
 

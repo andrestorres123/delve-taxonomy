@@ -87,10 +87,16 @@ class TestClassifier:
         assert "test_accuracy" in metrics
         assert "train_f1" in metrics
         assert "test_f1" in metrics
+        assert "per_class_f1" in metrics
 
         # Check metrics are reasonable (0-1 range)
         assert 0 <= metrics["train_accuracy"] <= 1
         assert 0 <= metrics["test_accuracy"] <= 1
+
+        # Check per_class_f1 has entries for the categories
+        per_class = metrics["per_class_f1"]
+        assert isinstance(per_class, dict)
+        assert all(0 <= v <= 1 for v in per_class.values())
 
     def test_train_classifier_filters_invalid_categories(self, sample_embeddings, sample_taxonomy):
         """Test that classifier filters out documents with invalid categories."""
