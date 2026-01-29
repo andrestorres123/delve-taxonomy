@@ -323,6 +323,54 @@ result = delve.run_with_docs_sync(docs)
 # Or async: result = await delve.run_with_docs(docs)
 ```
 
+### find_matches() / find_matches_async()
+
+Fast, lightweight binary detection for finding documents matching a **single category**. Uses hybrid semantic + keyword matching without running the full taxonomy pipeline.
+
+```python
+from delve import Delve
+
+result = Delve.find_matches(
+    "data.csv",
+    category={
+        "name": "Refund Request",
+        "description": "User asking for refund, money back, or cancellation",
+        "keywords": ["refund", "money back", "cancel order"],
+    },
+    text_column="content",
+    threshold=0.6,
+)
+
+# All documents returned with scores
+print(f"Found {result.stats['matches']} matches")
+
+# Access matched documents (category != None)
+for doc in result.matched_documents[:5]:
+    print(f"{doc.id}: {doc.confidence:.2f}")
+```
+
+<ParamField path="category" type="dict" required>
+  Category definition with `name`, `description`, and optional `keywords` list.
+</ParamField>
+
+<ParamField path="threshold" type="float" default="0.5">
+  Minimum score (0-1) for a document to be considered a match.
+</ParamField>
+
+<ParamField path="semantic_weight" type="float" default="0.7">
+  Weight for semantic (embedding) similarity.
+</ParamField>
+
+<ParamField path="keyword_weight" type="float" default="0.3">
+  Weight for keyword matching. Set to 0 for pure semantic matching.
+</ParamField>
+
+**Returns:** `MatchResult` with all documents scored, plus `matched_documents` and `unmatched_documents` properties.
+
+<Info>
+  Binary detection is much faster (~2-4 min for 30K docs) and cheaper (~$1-2) than full taxonomy generation. See [Binary Detection](/binary-detection) for full documentation.
+</Info>
+
 ## Data Sources
 
 Delve supports multiple input formats. The `source_type` is auto-detected from file extensions, or you can specify it explicitly.

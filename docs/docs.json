@@ -23,6 +23,7 @@
       {
         "group": "Advanced Topics",
         "pages": [
+          "binary-detection",
           "class-imbalance",
           "classifier-workflow"
         ]

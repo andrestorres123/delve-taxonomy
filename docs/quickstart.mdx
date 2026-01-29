@@ -153,6 +153,31 @@ Get up and running with Delve in just a few minutes. Choose your preferred inter
   </Card>
 </CardGroup>
 
+## Quick Alternative: Binary Detection
+
+If you already know the **single category** you're looking for, use `find_matches()` for faster results:
+
+```python
+from delve import Delve
+
+# Find all refund-related traces in seconds, not minutes
+result = Delve.find_matches(
+    "data.csv",
+    category={
+        "name": "Refund Request",
+        "description": "User asking for refund or money back",
+        "keywords": ["refund", "money back", "cancel"],
+    },
+    text_column="content",
+)
+
+print(f"Found {result.stats['matches']} matches")
+```
+
+<Tip>
+  Binary detection is ~10x faster and ~5x cheaper than full taxonomy generation. Use it when you know what you're looking for. See [Binary Detection](/binary-detection) for details.
+</Tip>
+
 ## What Happens During Processing?
 
 1. **Sampling** - Delve samples your dataset (default: 100 documents)

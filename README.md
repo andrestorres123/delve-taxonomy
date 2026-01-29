@@ -56,9 +56,34 @@ for doc in result.labeled_documents[:5]:
     print(f"  [{doc.category}] {doc.content[:50]}...")
 ```
 
+### Binary Detection (Single Category)
+
+For fast filtering when you know the category you're looking for:
+
+```python
+from delve import Delve
+
+# Find all refund-related documents (~$1-2 for 30K docs, runs in minutes)
+result = Delve.find_matches(
+    "data.csv",
+    category={
+        "name": "Refund Request",
+        "description": "User asking for refund or money back",
+        "keywords": ["refund", "money back", "cancel"],
+    },
+    text_column="text",
+    threshold=0.6,
+)
+
+print(f"Found {result.stats['matches']} matches")
+for doc in result.matched_documents[:5]:
+    print(f"  [{doc.confidence:.2f}] {doc.content[:50]}...")
+```
+
 ## Features
 
 - **Automated Taxonomy Generation** - No manual category creation using Claude 3.5 Sonnet
+- **Binary Detection** - Fast, cheap single-category filtering with `find_matches()`
 - **Multiple Data Sources** - CSV, JSON/JSONL, LangSmith runs, pandas DataFrames
 - **Smart Categorization** - Iterative refinement with minibatch clustering
 - **Flexible Exports** - JSON, CSV, and Markdown reports

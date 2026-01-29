@@ -1,6 +1,6 @@
 [project]
 name = "delve-taxonomy"
-version = "0.1.10"
+version = "0.1.12"
 description = "AI-powered taxonomy generation for your data"
 authors = [
     { name = "Andres Torres", email = "torres.andres87@gmail.com" },

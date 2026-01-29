@@ -12,7 +12,13 @@ import pandas as pd
 
 from delve.configuration import Configuration
 from delve.console import Console, Verbosity
-from delve.result import DelveResult, ClassificationResult, TrainingResult, TaxonomyCategory
+from delve.result import (
+    DelveResult,
+    ClassificationResult,
+    TrainingResult,
+    TaxonomyCategory,
+    MatchResult,
+)
 from delve.adapters import create_adapter
 from delve.graph import graph
 from delve.state import State, Doc
@@ -779,6 +785,253 @@ class Delve:
                     taxonomy=taxonomy,
                     embedding_model=embedding_model,
                     test_size=test_size,
+                    verbosity=verbosity,
+                )
+            )
+
+    # =========================================================================
+    # Binary Detection Methods
+    # =========================================================================
+
+    @classmethod
+    async def find_matches_async(
+        cls,
+        data: Union[str, Path, pd.DataFrame, List[Doc]],
+        category: Dict[str, Any],
+        text_column: Optional[str] = None,
+        id_column: Optional[str] = None,
+        threshold: float = 0.5,
+        semantic_weight: float = 0.7,
+        keyword_weight: float = 0.3,
+        case_sensitive: bool = False,
+        embedding_model: str = "text-embedding-3-large",
+        verbosity: Verbosity = Verbosity.NORMAL,
+    ) -> MatchResult:
+        """Find documents matching a single category using hybrid matching.
+
+        This is a fast, lightweight alternative to full taxonomy generation when you
+        want to find documents related to ONE specific category. Uses embedding
+        similarity combined with keyword matching for robust detection.
+
+        Args:
+            data: Documents to search. Can be:
+                - Path to CSV/JSON file
+                - pandas DataFrame
+                - List of Doc objects
+            category: Category definition with:
+                - name (str): Category name
+                - description (str): What this category represents
+                - keywords (list[str], optional): Keywords to boost matching
+            text_column: Column containing text (required for CSV/DataFrame)
+            id_column: Optional column for document IDs
+            threshold: Minimum score to consider a match (0-1, default: 0.5)
+            semantic_weight: Weight for semantic similarity (default: 0.7)
+            keyword_weight: Weight for keyword matching (default: 0.3)
+            case_sensitive: Whether keyword matching is case-sensitive (default: False)
+            embedding_model: OpenAI embedding model (default: text-embedding-3-large)
+            verbosity: Output verbosity level
+
+        Returns:
+            MatchResult with matched documents, scores, and statistics
+
+        Example:
+            >>> matches = await Delve.find_matches_async(
+            ...     "traces.csv",
+            ...     category={
+            ...         "name": "Refund Request",
+            ...         "description": "User asking for refund or money back",
+            ...         "keywords": ["refund", "money back", "cancel order"]
+            ...     },
+            ...     text_column="content",
+            ...     threshold=0.6,
+            ... )
+            >>> print(f"Found {len(matches.documents)} matching traces")
+        """
+        import numpy as np
+        from langchain_openai import OpenAIEmbeddings
+
+        console = Console(verbosity)
+
+        # Validate category
+        if "name" not in category:
+            raise ValueError("Category must have a 'name' field")
+        if "description" not in category:
+            raise ValueError("Category must have a 'description' field")
+
+        keywords = category.get("keywords", [])
+        if not keywords and keyword_weight > 0:
+            console.warning(
+                "No keywords provided but keyword_weight > 0. "
+                "Score will be based entirely on semantic similarity."
+            )
+            # Adjust weights when no keywords
+            semantic_weight = 1.0
+            keyword_weight = 0.0
+
+        # Normalize weights
+        total_weight = semantic_weight + keyword_weight
+        semantic_weight = semantic_weight / total_weight
+        keyword_weight = keyword_weight / total_weight
+
+        # Load documents
+        docs = cls._load_docs_for_classification(data, text_column, id_column)
+        console.info(f"Loaded {len(docs)} documents to search")
+
+        # Generate embeddings
+        with console.status("Generating embeddings..."):
+            encoder = OpenAIEmbeddings(model=embedding_model)
+
+            # Embed category description
+            category_embedding = np.array(
+                await encoder.aembed_documents([category["description"]])
+            )[0]
+
+            # Embed all documents
+            doc_embeddings = np.array(
+                await encoder.aembed_documents([d.content for d in docs])
+            )
+
+        # Calculate semantic scores (cosine similarity)
+        with console.status("Computing similarity scores..."):
+            # Normalize for cosine similarity
+            category_norm = category_embedding / np.linalg.norm(category_embedding)
+            norms = np.linalg.norm(doc_embeddings, axis=1, keepdims=True)
+            doc_norms = doc_embeddings / norms
+
+            # Cosine similarity
+            semantic_scores = np.dot(doc_norms, category_norm)
+
+        # Calculate keyword scores
+        keyword_scores = np.zeros(len(docs))
+        if keywords:
+            for i, doc in enumerate(docs):
+                content = doc.content if case_sensitive else doc.content.lower()
+                matches = sum(
+                    1 for kw in keywords
+                    if (kw if case_sensitive else kw.lower()) in content
+                )
+                keyword_scores[i] = matches / len(keywords)
+
+        # Combine scores
+        final_scores = (
+            (semantic_weight * semantic_scores) + (keyword_weight * keyword_scores)
+        )
+
+        # Label ALL documents - matches get category name, non-matches get None
+        labeled_docs = []
+        match_count = 0
+        for i, doc in enumerate(docs):
+            is_match = final_scores[i] >= threshold
+            if is_match:
+                match_count += 1
+
+            labeled_doc = Doc(
+                id=doc.id,
+                content=doc.content,
+                category=category["name"] if is_match else None,
+                confidence=float(final_scores[i]),
+            )
+            # Attach additional scores as attributes
+            labeled_doc.semantic_score = float(semantic_scores[i])
+            labeled_doc.keyword_score = float(keyword_scores[i])
+            labeled_docs.append(labeled_doc)
+
+        # Sort by score descending
+        labeled_docs.sort(key=lambda d: d.confidence, reverse=True)
+
+        console.success(
+            f"Found {match_count} matches out of {len(docs)} documents "
+            f"(threshold: {threshold})"
+        )
+
+        return MatchResult(
+            documents=labeled_docs,
+            category=category,
+            stats={
+                "total_documents": len(docs),
+                "matches": match_count,
+                "match_rate": match_count / len(docs) if docs else 0,
+                "threshold": threshold,
+                "semantic_weight": semantic_weight,
+                "keyword_weight": keyword_weight,
+                "embedding_model": embedding_model,
+                "avg_score": float(np.mean(final_scores)),
+                "max_score": float(np.max(final_scores)),
+                "min_score": float(np.min(final_scores)),
+            },
+        )
+
+    @classmethod
+    def find_matches(
+        cls,
+        data: Union[str, Path, pd.DataFrame, List[Doc]],
+        category: Dict[str, Any],
+        text_column: Optional[str] = None,
+        id_column: Optional[str] = None,
+        threshold: float = 0.5,
+        semantic_weight: float = 0.7,
+        keyword_weight: float = 0.3,
+        case_sensitive: bool = False,
+        embedding_model: str = "text-embedding-3-large",
+        verbosity: Verbosity = Verbosity.NORMAL,
+    ) -> MatchResult:
+        """Find documents matching a single category (sync version).
+
+        This is a fast, lightweight alternative to full taxonomy generation when you
+        want to find documents related to ONE specific category.
+
+        See find_matches_async() for full documentation.
+
+        Example:
+            >>> matches = Delve.find_matches(
+            ...     "traces.csv",
+            ...     category={
+            ...         "name": "Refund Request",
+            ...         "description": "User asking for refund or money back",
+            ...         "keywords": ["refund", "money back", "cancel order"]
+            ...     },
+            ...     text_column="content",
+            ... )
+            >>> for doc in matches.documents[:5]:
+            ...     print(f"{doc.id}: {doc.confidence:.2f} - {doc.content[:50]}...")
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(
+                cls.find_matches_async(
+                    data,
+                    category,
+                    text_column=text_column,
+                    id_column=id_column,
+                    threshold=threshold,
+                    semantic_weight=semantic_weight,
+                    keyword_weight=keyword_weight,
+                    case_sensitive=case_sensitive,
+                    embedding_model=embedding_model,
+                    verbosity=verbosity,
+                )
+            )
+        else:
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot use find_matches() in Jupyter/Colab without nest_asyncio. "
+                    "Use find_matches_async() instead or install nest_asyncio."
+                )
+            return asyncio.run(
+                cls.find_matches_async(
+                    data,
+                    category,
+                    text_column=text_column,
+                    id_column=id_column,
+                    threshold=threshold,
+                    semantic_weight=semantic_weight,
+                    keyword_weight=keyword_weight,
+                    case_sensitive=case_sensitive,
+                    embedding_model=embedding_model,
                     verbosity=verbosity,
                 )
             )

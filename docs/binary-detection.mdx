@@ -1,0 +1,327 @@
+---
+title: 'Binary Detection'
+description: 'Fast, lightweight filtering for single-category detection'
+---
+
+## Overview
+
+Binary detection is a fast, cost-effective way to find documents matching a **single category** without running full taxonomy generation. Instead of classifying documents into multiple categories, it answers a simple question: *"Does this document match my category?"*
+
+### When to Use Binary Detection
+
+| Use Case | Recommended Approach |
+|----------|---------------------|
+| Find all refund requests in support tickets | Binary Detection |
+| Categorize feedback into Bug/Feature/Question/etc. | Full Taxonomy |
+| Filter traces related to a specific feature | Binary Detection |
+| Discover what categories exist in your data | Full Taxonomy |
+| Quick exploration of a dataset | Binary Detection |
+
+### Comparison
+
+| Aspect | Binary Detection | Full Taxonomy |
+|--------|------------------|---------------|
+| **Speed** | Seconds to minutes | 10-30 minutes |
+| **Cost** | ~$1-2 per 30K docs | ~$5-15 per 30K docs |
+| **Categories** | One (yes/no) | Multiple (discovered or predefined) |
+| **Training** | None | Classifier trained on sample |
+| **Reusable** | No (stateless) | Yes (export classifier) |
+
+## Quick Start
+
+```python
+from delve import Delve
+
+# Define the ONE category you're looking for
+result = Delve.find_matches(
+    "traces.csv",
+    category={
+        "name": "Refund Request",
+        "description": "User asking for a refund, money back, order cancellation, or charge reversal",
+        "keywords": ["refund", "money back", "cancel order", "charged twice"],
+    },
+    text_column="content",
+    threshold=0.6,
+)
+
+print(f"Found {result.stats['matches']} matches out of {result.stats['total_documents']}")
+
+# All documents are returned with scores
+# Matches have category="Refund Request", non-matches have category=None
+for doc in result.matched_documents[:5]:
+    print(f"  {doc.id}: {doc.confidence:.2f} - {doc.content[:60]}...")
+```
+
+## How It Works
+
+Binary detection uses a **hybrid scoring** approach combining:
+
+1. **Semantic Similarity** (default: 70% weight)
+   - Embeds your category description using OpenAI embeddings
+   - Computes cosine similarity between category and each document
+   - Catches synonyms, paraphrases, and conceptually similar content
+
+2. **Keyword Matching** (default: 30% weight)
+   - Counts how many keywords appear in each document
+   - Provides a boost for exact terminology matches
+   - Fast and deterministic
+
+```
+final_score = (0.7 × semantic_similarity) + (0.3 × keyword_match_rate)
+```
+
+Documents with a score above your threshold are returned as matches.
+
+## API Reference
+
+### Delve.find_matches()
+
+```python
+matches = Delve.find_matches(
+    data,                           # Required: Data source
+    category,                       # Required: Category definition
+    text_column=None,               # Required for CSV/DataFrame
+    id_column=None,                 # Optional: Document ID column
+    threshold=0.5,                  # Minimum score to match (0-1)
+    semantic_weight=0.7,            # Weight for embedding similarity
+    keyword_weight=0.3,             # Weight for keyword matching
+    case_sensitive=False,           # Case-sensitive keyword matching
+    embedding_model="text-embedding-3-large",
+    verbosity=Verbosity.NORMAL,
+)
+```
+
+<ParamField path="data" type="str | Path | DataFrame | List[Doc]" required>
+  Documents to search. Supports:
+  - CSV file path
+  - JSON file path
+  - pandas DataFrame
+  - List of Doc objects
+</ParamField>
+
+<ParamField path="category" type="dict" required>
+  Category definition with:
+  - `name` (str, required): Category name
+  - `description` (str, required): What this category represents
+  - `keywords` (list[str], optional): Keywords to boost matching
+
+  ```python
+  category = {
+      "name": "Refund Request",
+      "description": "User asking for refund, money back, or order cancellation",
+      "keywords": ["refund", "money back", "cancel", "charged twice"]
+  }
+  ```
+
+  <Tip>
+    Write a detailed description - it's used for semantic matching. Keywords provide an additional boost for exact matches.
+  </Tip>
+</ParamField>
+
+<ParamField path="threshold" type="float" default="0.5">
+  Minimum score (0-1) for a document to be considered a match.
+
+  ```python
+  # Higher threshold = fewer, more precise matches
+  matches = Delve.find_matches(..., threshold=0.7)
+
+  # Lower threshold = more matches, may include false positives
+  matches = Delve.find_matches(..., threshold=0.4)
+  ```
+
+  <Info>
+    Use `matches.score_histogram()` to see the score distribution and tune your threshold.
+  </Info>
+</ParamField>
+
+<ParamField path="semantic_weight" type="float" default="0.7">
+  Weight for semantic (embedding) similarity. Combined with `keyword_weight`, these are normalized to sum to 1.0.
+</ParamField>
+
+<ParamField path="keyword_weight" type="float" default="0.3">
+  Weight for keyword matching. Set to 0 for pure semantic matching.
+
+  ```python
+  # Pure semantic matching (no keywords)
+  matches = Delve.find_matches(..., keyword_weight=0)
+
+  # Heavy keyword emphasis
+  matches = Delve.find_matches(..., semantic_weight=0.4, keyword_weight=0.6)
+  ```
+</ParamField>
+
+## Working with Results
+
+### MatchResult Object
+
+```python
+result = Delve.find_matches(...)
+
+# ALL documents with scores (sorted by score descending)
+result.documents            # List[Doc] - all docs with .category, .confidence
+
+# Only matched documents (category != None)
+result.matched_documents    # List[Doc] - only matches
+
+# Only unmatched documents (category == None)
+result.unmatched_documents  # List[Doc] - below threshold
+
+# Category definition used
+result.category             # Dict with name, description, keywords
+
+# Statistics
+result.stats                # Dict with counts, rates, score distribution
+```
+
+### Export Results
+
+```python
+# To DataFrame (all documents)
+df = result.to_dataframe()
+print(df.head())
+
+# Filter to just matches
+matched_df = df[df['category'].notna()]
+
+# To files
+paths = result.export("./output", formats=["csv", "json"])
+print(f"Exported to: {paths}")
+```
+
+### Tune Threshold
+
+```python
+# See score distribution
+histogram = result.score_histogram(bins=10)
+print(f"Score distribution: {histogram}")
+
+# Check stats
+print(f"Total: {result.stats['total_documents']}")
+print(f"Matches: {result.stats['matches']}")
+print(f"Match rate: {result.stats['match_rate']:.1%}")
+print(f"Avg score: {result.stats['avg_score']:.2f}")
+print(f"Max score: {result.stats['max_score']:.2f}")
+
+# Access matched vs unmatched easily
+print(f"Matched: {len(result.matched_documents)}")
+print(f"Unmatched: {len(result.unmatched_documents)}")
+```
+
+## Examples
+
+### Filter Support Tickets
+
+```python
+from delve import Delve
+
+# Find billing-related tickets
+billing_issues = Delve.find_matches(
+    "support_tickets.csv",
+    category={
+        "name": "Billing Issue",
+        "description": "Customer having problems with payment, charges, invoices, or subscriptions",
+        "keywords": ["billing", "charge", "invoice", "payment", "subscription", "credit card"]
+    },
+    text_column="ticket_description",
+    threshold=0.55,
+)
+
+print(f"Found {len(billing_issues.documents)} billing-related tickets")
+billing_issues.export("./billing_issues")
+```
+
+### Analyze LLM Traces
+
+```python
+from delve import Delve
+
+# Find traces where users ask about a specific feature
+feature_traces = Delve.find_matches(
+    "langsmith://my-project",  # LangSmith data source
+    category={
+        "name": "Dark Mode Questions",
+        "description": "User asking about dark mode, theme settings, or display preferences",
+        "keywords": ["dark mode", "theme", "night mode", "light mode", "display"]
+    },
+    threshold=0.6,
+)
+
+# See what users are asking
+for trace in feature_traces.documents[:10]:
+    print(f"Score: {trace.confidence:.2f}")
+    print(f"Content: {trace.content[:200]}...")
+    print("---")
+```
+
+### Pure Semantic Search (No Keywords)
+
+```python
+# When your category is conceptual and keywords don't help
+frustrated_users = Delve.find_matches(
+    "feedback.csv",
+    category={
+        "name": "User Frustration",
+        "description": "User expressing frustration, anger, disappointment, or dissatisfaction with the product or experience",
+        # No keywords - rely entirely on semantic understanding
+    },
+    text_column="feedback",
+    threshold=0.65,
+    keyword_weight=0,  # Pure semantic matching
+)
+```
+
+### DataFrame Input
+
+```python
+import pandas as pd
+from delve import Delve
+
+# Load your own DataFrame
+df = pd.read_csv("data.csv")
+
+# Filter for specific content
+matches = Delve.find_matches(
+    df,
+    category={
+        "name": "Feature Request",
+        "description": "User suggesting a new feature or improvement",
+        "keywords": ["would be nice", "please add", "feature request", "suggestion"]
+    },
+    text_column="message",
+    id_column="msg_id",
+)
+
+# Merge results back
+matched_ids = {doc.id for doc in matches.documents}
+df["is_feature_request"] = df["msg_id"].astype(str).isin(matched_ids)
+```
+
+## Cost Estimation
+
+Binary detection only uses the OpenAI Embeddings API (no LLM calls).
+
+| Documents | Avg Tokens/Doc | Total Tokens | Cost (text-embedding-3-large) |
+|-----------|----------------|--------------|-------------------------------|
+| 1,000 | 300 | 300K | ~$0.04 |
+| 10,000 | 300 | 3M | ~$0.39 |
+| 30,000 | 300 | 9M | ~$1.17 |
+| 100,000 | 300 | 30M | ~$3.90 |
+
+<Tip>
+  Use `text-embedding-3-small` for even lower costs at slightly reduced accuracy:
+
+  ```python
+  matches = Delve.find_matches(..., embedding_model="text-embedding-3-small")
+  ```
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Full Taxonomy Generation" icon="sitemap" href="/quickstart">
+    When you need multiple categories
+  </Card>
+  <Card title="Classifier Workflow" icon="brain" href="/classifier-workflow">
+    Train reusable classifiers
+  </Card>
+</CardGroup>

@@ -10,11 +10,9 @@ from pathlib import Path
 import pandas as pd
 
 if TYPE_CHECKING:
-    from sklearn.ensemble import RandomForestClassifier
-    from delve.state import Doc, State
     from delve.configuration import Configuration
-else:
-    from delve.state import State
+
+from delve.state import Doc, State
 
 
 @dataclass
@@ -343,6 +341,121 @@ class ClassificationResult:
             output_paths["json"] = json_path
 
         return output_paths
+
+
+@dataclass
+class MatchResult:
+    """Results from binary detection with find_matches.
+
+    Contains ALL documents with scores. Documents above the threshold have
+    their category set to the target category name; documents below threshold
+    have category=None.
+    """
+
+    documents: List[Doc]
+    category: Dict[str, Any]
+    stats: Dict[str, Any]
+
+    @property
+    def matched_documents(self) -> List[Doc]:
+        """Get only documents that matched (above threshold)."""
+        return [doc for doc in self.documents if doc.category is not None]
+
+    @property
+    def unmatched_documents(self) -> List[Doc]:
+        """Get only documents that did not match (below threshold)."""
+        return [doc for doc in self.documents if doc.category is None]
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Convert all documents to a pandas DataFrame.
+
+        Returns:
+            DataFrame with columns: id, content, category, confidence,
+            semantic_score, keyword_score
+        """
+        return pd.DataFrame([
+            {
+                "id": doc.id,
+                "content": doc.content,
+                "category": doc.category,
+                "confidence": doc.confidence,
+                "semantic_score": getattr(doc, "semantic_score", None),
+                "keyword_score": getattr(doc, "keyword_score", None),
+            }
+            for doc in self.documents
+        ])
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary representation."""
+        return {
+            "documents": [
+                {
+                    "id": doc.id,
+                    "content": doc.content,
+                    "category": doc.category,
+                    "confidence": doc.confidence,
+                }
+                for doc in self.documents
+            ],
+            "category": self.category,
+            "stats": self.stats,
+        }
+
+    def export(
+        self,
+        output_dir: Union[str, Path],
+        formats: Optional[List[str]] = None,
+    ) -> Dict[str, Path]:
+        """Export results to files.
+
+        Args:
+            output_dir: Directory for output files
+            formats: List of formats (default: ["csv"])
+                Supported: "csv", "json"
+
+        Returns:
+            Dict mapping format name to output file path
+        """
+        import json
+
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        formats = formats or ["csv"]
+        output_paths = {}
+
+        if "csv" in formats:
+            csv_path = output_dir / "labeled_documents.csv"
+            self.to_dataframe().to_csv(csv_path, index=False)
+            output_paths["csv"] = csv_path
+
+        if "json" in formats:
+            json_path = output_dir / "labeled_documents.json"
+            with open(json_path, "w") as f:
+                json.dump(self.to_dict(), f, indent=2)
+            output_paths["json"] = json_path
+
+        return output_paths
+
+    def score_histogram(self, bins: int = 20) -> Dict[str, Any]:
+        """Get score distribution for threshold tuning.
+
+        Args:
+            bins: Number of histogram bins
+
+        Returns:
+            Dict with bin edges and counts
+        """
+        import numpy as np
+
+        scores = [doc.confidence for doc in self.documents]
+        counts, edges = np.histogram(scores, bins=bins, range=(0, 1))
+        return {
+            "bin_edges": edges.tolist(),
+            "counts": counts.tolist(),
+            "total": len(scores),
+            "matches": len(self.matched_documents),
+        }
 
 
 @dataclass
