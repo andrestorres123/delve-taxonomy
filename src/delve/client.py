@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Union, Dict, Any
 
@@ -11,7 +12,7 @@ import pandas as pd
 
 from delve.configuration import Configuration
 from delve.console import Console, Verbosity
-from delve.result import DelveResult
+from delve.result import DelveResult, ClassificationResult, TrainingResult, TaxonomyCategory
 from delve.adapters import create_adapter
 from delve.graph import graph
 from delve.state import State, Doc
@@ -432,3 +433,405 @@ class Delve:
                     **adapter_kwargs,
                 )
             )
+
+    # =========================================================================
+    # Class Methods for Classifier Operations
+    # =========================================================================
+
+    @classmethod
+    async def classify_async(
+        cls,
+        data: Union[str, Path, pd.DataFrame, List[Doc]],
+        classifier_path: Union[str, Path],
+        text_column: Optional[str] = None,
+        id_column: Optional[str] = None,
+        include_confidence: bool = True,
+        verbosity: Verbosity = Verbosity.SILENT,
+    ) -> ClassificationResult:
+        """Classify documents using a saved classifier.
+
+        This method loads a previously saved classifier bundle and uses it
+        to classify new documents. Only embedding API calls are made - no
+        LLM costs.
+
+        Args:
+            data: Documents to classify. Can be:
+                - Path to CSV/JSON file
+                - pandas DataFrame
+                - List of Doc objects
+            classifier_path: Path to saved classifier bundle (.joblib)
+            text_column: Column containing text (required for CSV/DataFrame)
+            id_column: Optional column for document IDs
+            include_confidence: Whether to include confidence scores (default: True)
+            verbosity: Output verbosity level
+
+        Returns:
+            ClassificationResult with classified documents
+
+        Example:
+            >>> predictions = await Delve.classify_async(
+            ...     "new_data.csv",
+            ...     classifier_path="classifier.joblib",
+            ...     text_column="text",
+            ... )
+            >>> for doc in predictions.documents:
+            ...     print(f"{doc.id}: {doc.category} ({doc.confidence:.2%})")
+        """
+        from langchain_openai import OpenAIEmbeddings
+        from delve.core.classifier import (
+            load_bundle,
+            predict_with_classifier,
+            get_prediction_confidence,
+        )
+
+        console = Console(verbosity)
+
+        # Load classifier bundle
+        with console.status(f"Loading classifier from {classifier_path}..."):
+            bundle = load_bundle(classifier_path)
+
+        console.info(
+            f"Loaded classifier trained on {bundle.embedding_model} "
+            f"with {len(bundle.taxonomy)} categories"
+        )
+
+        # Load documents
+        docs = cls._load_docs_for_classification(data, text_column, id_column)
+        console.info(f"Loaded {len(docs)} documents to classify")
+
+        # Generate embeddings
+        with console.status(f"Generating embeddings for {len(docs)} documents..."):
+            encoder = OpenAIEmbeddings(model=bundle.embedding_model)
+            embeddings = await encoder.aembed_documents([d.content for d in docs])
+
+        # Predict categories
+        with console.status("Classifying documents..."):
+            predictions = predict_with_classifier(
+                bundle.model, embeddings, bundle.index_to_category
+            )
+
+            if include_confidence:
+                confidences = get_prediction_confidence(bundle.model, embeddings)
+            else:
+                confidences = [None] * len(docs)
+
+        # Update docs with predictions
+        for doc, category, confidence in zip(docs, predictions, confidences):
+            doc.category = category
+            doc.confidence = confidence
+
+        console.success(f"Classified {len(docs)} documents")
+
+        return ClassificationResult(
+            documents=docs,
+            classifier_info={
+                "classifier_path": str(classifier_path),
+                "embedding_model": bundle.embedding_model,
+                "num_categories": len(bundle.taxonomy),
+                "taxonomy": bundle.taxonomy,
+                "created_at": bundle.created_at,
+                "delve_version": bundle.delve_version,
+                "original_metrics": bundle.metrics,
+            },
+        )
+
+    @classmethod
+    def classify(
+        cls,
+        data: Union[str, Path, pd.DataFrame, List[Doc]],
+        classifier_path: Union[str, Path],
+        text_column: Optional[str] = None,
+        id_column: Optional[str] = None,
+        include_confidence: bool = True,
+        verbosity: Verbosity = Verbosity.SILENT,
+    ) -> ClassificationResult:
+        """Classify documents using a saved classifier (sync version).
+
+        See classify_async() for full documentation.
+
+        Example:
+            >>> predictions = Delve.classify(
+            ...     "new_data.csv",
+            ...     classifier_path="classifier.joblib",
+            ...     text_column="text",
+            ... )
+            >>> print(predictions.to_dataframe())
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(
+                cls.classify_async(
+                    data,
+                    classifier_path,
+                    text_column=text_column,
+                    id_column=id_column,
+                    include_confidence=include_confidence,
+                    verbosity=verbosity,
+                )
+            )
+        else:
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot use classify() in Jupyter/Colab without nest_asyncio. "
+                    "Use classify_async() instead or install nest_asyncio."
+                )
+            return asyncio.run(
+                cls.classify_async(
+                    data,
+                    classifier_path,
+                    text_column=text_column,
+                    id_column=id_column,
+                    include_confidence=include_confidence,
+                    verbosity=verbosity,
+                )
+            )
+
+    @classmethod
+    async def train_from_labeled_async(
+        cls,
+        data: Union[str, Path, pd.DataFrame],
+        text_column: str,
+        label_column: str,
+        id_column: Optional[str] = None,
+        taxonomy: Optional[Union[str, Path, List[Dict[str, str]]]] = None,
+        embedding_model: str = "text-embedding-3-large",
+        test_size: float = 0.2,
+        verbosity: Verbosity = Verbosity.SILENT,
+    ) -> TrainingResult:
+        """Train a classifier from a labeled dataset.
+
+        Use this to train a classifier from your own labeled data (or
+        corrected Delve output) without any LLM calls during training.
+
+        Args:
+            data: Labeled data source. Can be:
+                - Path to CSV/JSON file
+                - pandas DataFrame
+            text_column: Column containing document text
+            label_column: Column containing category labels
+            id_column: Optional column for document IDs
+            taxonomy: Optional explicit taxonomy with descriptions. Can be:
+                - Path to JSON/CSV file
+                - List of dicts with 'id', 'name', 'description'
+                If not provided, taxonomy is inferred from unique labels.
+            embedding_model: OpenAI embedding model (default: text-embedding-3-large)
+            test_size: Fraction of data for validation (default: 0.2)
+            verbosity: Output verbosity level
+
+        Returns:
+            TrainingResult with trained model and metrics
+
+        Example:
+            >>> result = await Delve.train_from_labeled_async(
+            ...     "labeled_data.csv",
+            ...     text_column="text",
+            ...     label_column="category",
+            ... )
+            >>> print(f"Test F1: {result.metrics['test_f1']:.2%}")
+            >>> result.save_classifier("my_classifier.joblib")
+        """
+        from langchain_openai import OpenAIEmbeddings
+        from delve.core.classifier import train_classifier, _infer_taxonomy_from_labels
+        from delve.core.data_loader import _load_predefined_taxonomy
+
+        console = Console(verbosity)
+
+        # Load data
+        df = cls._load_dataframe(data)
+        console.info(f"Loaded {len(df)} labeled documents")
+
+        # Validate columns
+        if text_column not in df.columns:
+            raise ValueError(f"Text column '{text_column}' not found. Available: {list(df.columns)}")
+        if label_column not in df.columns:
+            raise ValueError(f"Label column '{label_column}' not found. Available: {list(df.columns)}")
+
+        # Get labels
+        labels = df[label_column].astype(str).tolist()
+        unique_labels = set(labels)
+        console.info(f"Found {len(unique_labels)} unique categories")
+
+        # Build taxonomy
+        if taxonomy is not None:
+            taxonomy_list = _load_predefined_taxonomy(taxonomy)
+            taxonomy_names = {cat["name"] for cat in taxonomy_list}
+            # Validate all labels are in taxonomy
+            missing = unique_labels - taxonomy_names
+            if missing:
+                raise ValueError(
+                    f"Labels not in taxonomy: {missing}. "
+                    f"Available categories: {taxonomy_names}"
+                )
+        else:
+            taxonomy_list = _infer_taxonomy_from_labels(labels)
+            console.info("Inferred taxonomy from labels")
+
+        # Create Doc objects
+        docs = []
+        for idx, row in df.iterrows():
+            doc_id = str(row[id_column]) if id_column and id_column in df.columns else str(idx)
+            docs.append(Doc(
+                id=doc_id,
+                content=str(row[text_column]),
+                category=str(row[label_column]),
+            ))
+
+        # Generate embeddings
+        with console.status(f"Generating embeddings for {len(docs)} documents..."):
+            encoder = OpenAIEmbeddings(model=embedding_model)
+            embeddings = await encoder.aembed_documents([d.content for d in docs])
+
+        # Train classifier
+        with console.status("Training classifier..."):
+            model, index_to_category, metrics = train_classifier(
+                docs,
+                embeddings,
+                taxonomy_list,
+                console=console,
+            )
+
+        console.success(
+            f"Classifier trained - Test F1: {metrics['test_f1']:.3f}, "
+            f"Test Accuracy: {metrics['test_accuracy']:.3f}"
+        )
+
+        # Calculate counts
+        total = len(docs)
+        train_count = int(total * (1 - test_size))
+        val_count = total - train_count
+
+        return TrainingResult(
+            model=model,
+            index_to_category=index_to_category,
+            taxonomy=[
+                TaxonomyCategory(
+                    id=cat["id"],
+                    name=cat["name"],
+                    description=cat["description"],
+                )
+                for cat in taxonomy_list
+            ],
+            metrics=metrics,
+            training_docs_count=train_count,
+            validation_docs_count=val_count,
+            embedding_model=embedding_model,
+            created_at=datetime.now().isoformat(),
+        )
+
+    @classmethod
+    def train_from_labeled(
+        cls,
+        data: Union[str, Path, pd.DataFrame],
+        text_column: str,
+        label_column: str,
+        id_column: Optional[str] = None,
+        taxonomy: Optional[Union[str, Path, List[Dict[str, str]]]] = None,
+        embedding_model: str = "text-embedding-3-large",
+        test_size: float = 0.2,
+        verbosity: Verbosity = Verbosity.SILENT,
+    ) -> TrainingResult:
+        """Train a classifier from a labeled dataset (sync version).
+
+        See train_from_labeled_async() for full documentation.
+
+        Example:
+            >>> result = Delve.train_from_labeled(
+            ...     "corrected_labels.csv",
+            ...     text_column="text",
+            ...     label_column="category",
+            ... )
+            >>> result.save_classifier("improved_classifier.joblib")
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(
+                cls.train_from_labeled_async(
+                    data,
+                    text_column,
+                    label_column,
+                    id_column=id_column,
+                    taxonomy=taxonomy,
+                    embedding_model=embedding_model,
+                    test_size=test_size,
+                    verbosity=verbosity,
+                )
+            )
+        else:
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot use train_from_labeled() in Jupyter/Colab without nest_asyncio. "
+                    "Use train_from_labeled_async() instead or install nest_asyncio."
+                )
+            return asyncio.run(
+                cls.train_from_labeled_async(
+                    data,
+                    text_column,
+                    label_column,
+                    id_column=id_column,
+                    taxonomy=taxonomy,
+                    embedding_model=embedding_model,
+                    test_size=test_size,
+                    verbosity=verbosity,
+                )
+            )
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    @staticmethod
+    def _load_docs_for_classification(
+        data: Union[str, Path, pd.DataFrame, List[Doc]],
+        text_column: Optional[str],
+        id_column: Optional[str],
+    ) -> List[Doc]:
+        """Load documents from various sources for classification."""
+        if isinstance(data, list):
+            # Already Doc objects
+            if data and isinstance(data[0], Doc):
+                return data
+            raise ValueError("List must contain Doc objects")
+
+        # Load as DataFrame
+        df = Delve._load_dataframe(data)
+
+        if text_column is None:
+            raise ValueError("text_column is required for CSV/DataFrame input")
+
+        if text_column not in df.columns:
+            raise ValueError(f"Text column '{text_column}' not found. Available: {list(df.columns)}")
+
+        docs = []
+        for idx, row in df.iterrows():
+            doc_id = str(row[id_column]) if id_column and id_column in df.columns else str(idx)
+            docs.append(Doc(
+                id=doc_id,
+                content=str(row[text_column]),
+            ))
+
+        return docs
+
+    @staticmethod
+    def _load_dataframe(data: Union[str, Path, pd.DataFrame]) -> pd.DataFrame:
+        """Load data as a pandas DataFrame."""
+        if isinstance(data, pd.DataFrame):
+            return data
+
+        path = Path(data)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        if path.suffix == ".csv":
+            return pd.read_csv(path)
+        elif path.suffix == ".json":
+            return pd.read_json(path)
+        else:
+            raise ValueError(f"Unsupported file format: {path.suffix}. Use .csv or .json")

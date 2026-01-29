@@ -1,0 +1,303 @@
+---
+title: 'Classifier Export & Training'
+description: 'Save classifiers for reuse and train from labeled data'
+---
+
+<Info>
+Learn how to export trained classifiers, classify new documents without LLM costs, and train classifiers from your own labeled data.
+</Info>
+
+## Overview
+
+Delve's classifier workflow enables cost-effective production use:
+
+1. **Export**: Save a trained classifier after any Delve run
+2. **Classify**: Label new documents using only embeddings (no LLM)
+3. **Retrain**: Improve classifiers with corrected/curated data
+
+## Exporting a Classifier
+
+After running Delve, save the classifier for later use:
+
+```python
+from delve import Delve
+
+delve = Delve(sample_size=100)
+result = delve.run_sync("data.csv", text_column="text")
+
+# Save the trained classifier
+result.save_classifier("classifier.joblib")
+```
+
+### What's Saved
+
+The `.joblib` bundle contains:
+- Trained RandomForest model
+- Category index mappings
+- Embedding model name (for consistency)
+- Full taxonomy with descriptions
+- Training metrics
+
+<Warning>
+A classifier is only available when `sample_size < total documents`. If all documents were labeled by the LLM (no classifier was trained), `save_classifier()` will raise an error.
+</Warning>
+
+## Classifying New Documents
+
+Load a saved classifier and classify documents with no LLM cost:
+
+```python
+from delve import Delve
+
+predictions = Delve.classify(
+    "new_data.csv",
+    classifier_path="classifier.joblib",
+    text_column="text",
+)
+
+# Access results
+for doc in predictions.documents:
+    print(f"{doc.id}: {doc.category} (confidence: {doc.confidence:.2%})")
+```
+
+### Cost Comparison
+
+| Method | LLM Cost | Embedding Cost |
+|--------|----------|----------------|
+| Full Delve run | High | Medium |
+| Saved classifier | None | Low |
+
+### Accessing Results
+
+```python
+# As list of Doc objects
+for doc in predictions.documents:
+    print(f"{doc.id}: {doc.category} (confidence: {doc.confidence:.2f})")
+
+# As DataFrame
+df = predictions.to_dataframe()
+print(df.head())
+
+# Export to file
+predictions.export("./output", formats=["csv", "json"])
+```
+
+### API Options
+
+```python
+predictions = Delve.classify(
+    data="new_data.csv",           # CSV, JSON, DataFrame, or List[Doc]
+    classifier_path="classifier.joblib",
+    text_column="text",            # Required for CSV/DataFrame
+    id_column="doc_id",            # Optional: column for document IDs
+    include_confidence=True,       # Include confidence scores (default: True)
+    verbosity=Verbosity.NORMAL,    # Output verbosity
+)
+```
+
+## Training from Labeled Data
+
+Train a classifier directly from your labeled dataset:
+
+```python
+from delve import Delve
+
+result = Delve.train_from_labeled(
+    "labeled_data.csv",
+    text_column="text",
+    label_column="category",
+)
+
+print(f"Test Accuracy: {result.metrics['test_accuracy']:.2%}")
+print(f"Test F1: {result.metrics['test_f1']:.2%}")
+
+# Save for production use
+result.save_classifier("production_classifier.joblib")
+```
+
+### When to Use This
+
+- You have manually labeled data
+- You've corrected Delve's output
+- You want to combine multiple labeled datasets
+- You're creating a production classifier from curated examples
+
+### With Explicit Taxonomy
+
+Provide a taxonomy for consistent category descriptions:
+
+```python
+taxonomy = [
+    {"id": "1", "name": "Bug", "description": "Software bugs and defects"},
+    {"id": "2", "name": "Feature", "description": "Feature requests and enhancements"},
+    {"id": "3", "name": "Question", "description": "General questions"},
+]
+
+result = Delve.train_from_labeled(
+    "labeled_data.csv",
+    text_column="text",
+    label_column="category",
+    taxonomy=taxonomy,
+)
+```
+
+If no taxonomy is provided, one is inferred from the unique labels in your data.
+
+### Checking Quality
+
+```python
+print(f"Training samples: {result.training_docs_count}")
+print(f"Test samples: {result.validation_docs_count}")
+print(f"Test Accuracy: {result.metrics['test_accuracy']:.2%}")
+print(f"Test F1: {result.metrics['test_f1']:.2%}")
+
+# Per-class performance
+for cat, f1 in result.metrics['per_class_f1'].items():
+    print(f"  {cat}: {f1:.2f}")
+```
+
+### API Options
+
+```python
+result = Delve.train_from_labeled(
+    data="labeled_data.csv",       # CSV, JSON, or DataFrame
+    text_column="text",            # Column with document text
+    label_column="category",       # Column with labels
+    id_column="doc_id",            # Optional: column for document IDs
+    taxonomy="taxonomy.json",      # Optional: explicit taxonomy
+    embedding_model="text-embedding-3-large",  # Embedding model
+    test_size=0.2,                 # Validation split (default: 20%)
+    verbosity=Verbosity.NORMAL,    # Output verbosity
+)
+```
+
+## Human-in-the-Loop Workflow
+
+Combine Delve's automation with human expertise:
+
+### Step 1: Initial Run
+
+```python
+from delve import Delve, Verbosity
+
+delve = Delve(sample_size=200, verbosity=Verbosity.VERBOSE)
+result = delve.run_sync("training_data.csv", text_column="content")
+
+# Export for human review
+await result.export()  # Creates labeled_documents.csv
+```
+
+### Step 2: Human Review
+
+Review `labeled_documents.csv` and correct mislabeled documents. Focus on:
+- Low-confidence predictions
+- "Other" category documents
+- Edge cases between similar categories
+
+### Step 3: Retrain from Corrected Data
+
+```python
+# Train improved classifier from corrected labels
+result = Delve.train_from_labeled(
+    "corrected_labels.csv",
+    text_column="content",
+    label_column="category",
+    taxonomy="taxonomy.json",  # Use original taxonomy
+)
+
+print(f"Improved Test F1: {result.metrics['test_f1']:.2%}")
+result.save_classifier("production_classifier.joblib")
+```
+
+### Step 4: Production Classification
+
+```python
+# Classify new documents with no LLM cost
+predictions = Delve.classify(
+    "new_documents.csv",
+    classifier_path="production_classifier.joblib",
+    text_column="content",
+)
+
+# Export results
+df = predictions.to_dataframe()
+df.to_csv("classified_documents.csv", index=False)
+```
+
+<Tip>
+Focus human review on low-confidence predictions and "Other" categories - these benefit most from correction.
+</Tip>
+
+## Async API
+
+Both methods have async versions for use in async applications:
+
+```python
+import asyncio
+from delve import Delve
+
+async def main():
+    # Classify async
+    predictions = await Delve.classify_async(
+        "new_data.csv",
+        classifier_path="classifier.joblib",
+        text_column="text",
+    )
+
+    # Train async
+    result = await Delve.train_from_labeled_async(
+        "labeled_data.csv",
+        text_column="text",
+        label_column="category",
+    )
+
+asyncio.run(main())
+```
+
+## Result Classes
+
+### ClassificationResult
+
+Returned by `Delve.classify()`:
+
+```python
+@dataclass
+class ClassificationResult:
+    documents: List[Doc]           # Classified docs with category + confidence
+    classifier_info: Dict[str, Any]  # Metadata about classifier used
+
+    def to_dataframe(self) -> pd.DataFrame
+    def to_dict(self) -> Dict[str, Any]
+    def export(self, output_dir, formats=["csv"]) -> Dict[str, Path]
+```
+
+### TrainingResult
+
+Returned by `Delve.train_from_labeled()`:
+
+```python
+@dataclass
+class TrainingResult:
+    model: RandomForestClassifier
+    index_to_category: Dict[int, str]
+    taxonomy: List[TaxonomyCategory]
+    metrics: Dict[str, Any]          # train/test accuracy, F1, per_class_f1
+    training_docs_count: int
+    validation_docs_count: int
+    embedding_model: str
+    created_at: str
+
+    def save_classifier(self, path) -> Path
+    def to_dict(self) -> Dict[str, Any]
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Class Imbalance" icon="balance-scale" href="/class-imbalance">
+    Handle imbalanced data for better classifier performance
+  </Card>
+  <Card title="Configuration Guide" icon="sliders" href="/configuration-guide">
+    Tune parameters for your use case
+  </Card>
+</CardGroup>

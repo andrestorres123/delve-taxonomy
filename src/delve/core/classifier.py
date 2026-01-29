@@ -1,6 +1,10 @@
 """Embedding-based classifier for document labeling at scale."""
 
-from typing import TYPE_CHECKING, List, Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, List, Dict, Optional, Tuple, Union
+
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -11,6 +15,89 @@ from delve.state import Doc
 
 if TYPE_CHECKING:
     from delve.console import Console
+
+
+@dataclass
+class ClassifierBundle:
+    """Bundle containing a trained classifier and all metadata needed for inference.
+
+    This bundle can be serialized to disk with joblib and loaded later to
+    classify new documents without any LLM calls.
+    """
+    model: RandomForestClassifier
+    index_to_category: Dict[int, str]
+    embedding_model: str
+    embedding_dimensions: int
+    taxonomy: List[Dict[str, str]]
+    metrics: Dict[str, Any]
+    created_at: str
+    delve_version: str
+
+
+def save_bundle(bundle: ClassifierBundle, path: Union[str, Path]) -> Path:
+    """Save classifier bundle to joblib file.
+
+    Args:
+        bundle: ClassifierBundle to save
+        path: Output file path (should end with .joblib)
+
+    Returns:
+        Path to saved file
+    """
+    import joblib
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bundle, path)
+    return path
+
+
+def load_bundle(path: Union[str, Path]) -> ClassifierBundle:
+    """Load classifier bundle from joblib file.
+
+    Args:
+        path: Path to saved classifier bundle
+
+    Returns:
+        ClassifierBundle instance
+
+    Raises:
+        ValueError: If file doesn't contain a valid ClassifierBundle
+        FileNotFoundError: If file doesn't exist
+    """
+    import joblib
+
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Classifier bundle not found: {path}")
+
+    bundle = joblib.load(path)
+    if not isinstance(bundle, ClassifierBundle):
+        raise ValueError(
+            f"Invalid classifier bundle format. Expected ClassifierBundle, "
+            f"got {type(bundle).__name__}"
+        )
+    return bundle
+
+
+def _infer_taxonomy_from_labels(labels: List[str]) -> List[Dict[str, str]]:
+    """Create minimal taxonomy from unique labels.
+
+    Args:
+        labels: List of category labels
+
+    Returns:
+        List of taxonomy category dicts with id, name, description
+    """
+    unique_labels = sorted(set(labels))
+    return [
+        {
+            "id": str(i + 1),
+            "name": label,
+            "description": f"Category: {label}",
+        }
+        for i, label in enumerate(unique_labels)
+    ]
 
 
 def train_classifier(

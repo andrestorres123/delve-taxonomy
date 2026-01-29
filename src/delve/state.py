@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, List, Optional, Dict
+from typing import Annotated, Any, List, Optional, Dict
 import operator
 
 from langgraph.managed import IsLastStep
@@ -17,6 +17,7 @@ class Doc:
     summary: Optional[str] = None
     explanation: Optional[str] = None
     category: Optional[str] = None
+    confidence: Optional[float] = None
 
 
 @dataclass
@@ -60,3 +61,7 @@ class State(InputState, OutputState):
     warnings: List[str] = field(default_factory=list)
     sample_distribution: Optional[Dict[str, int]] = None
     zero_sample_categories: List[str] = field(default_factory=list)
+
+    # Classifier storage for export
+    classifier_model: Optional[Any] = None  # RandomForestClassifier
+    classifier_index_to_category: Optional[Dict[int, str]] = None

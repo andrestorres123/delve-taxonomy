@@ -470,6 +470,60 @@ delve = Delve(
 )
 ```
 
+## Classifier Export & Reuse
+
+After a successful run, you can save the trained classifier for later use without any LLM costs.
+
+### Saving a Classifier
+
+```python
+result = delve.run_sync("data.csv", text_column="text")
+result.save_classifier("my_classifier.joblib")
+```
+
+The saved bundle includes:
+- The trained RandomForest model
+- Category mappings
+- Embedding model configuration
+- Training metrics for reference
+
+### Classifying New Documents
+
+```python
+predictions = Delve.classify(
+    "new_documents.csv",
+    classifier_path="my_classifier.joblib",
+    text_column="text",
+)
+
+for doc in predictions.documents:
+    print(f"{doc.id}: {doc.category} ({doc.confidence:.0%})")
+```
+
+<Info>
+Classification only requires OpenAI embedding API calls - no LLM costs. This makes it very cost-effective for production use.
+</Info>
+
+### Training from Labeled Data
+
+If you have your own labeled dataset (or corrected Delve output), train a classifier directly:
+
+```python
+result = Delve.train_from_labeled(
+    "labeled_data.csv",
+    text_column="text",
+    label_column="category",
+)
+print(f"Test F1: {result.metrics['test_f1']:.2%}")
+result.save_classifier("production_classifier.joblib")
+```
+
+<Tip>
+This is perfect for human-in-the-loop workflows: run Delve, review and correct labels, then train an improved classifier.
+</Tip>
+
+See the [Classifier Export & Training](/classifier-workflow) guide for complete documentation.
+
 ## Next Steps
 
 <CardGroup cols={2}>

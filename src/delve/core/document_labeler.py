@@ -583,4 +583,7 @@ async def label_documents(
         "warnings": warnings_list,
         "sample_distribution": dict(sample_distribution),
         "zero_sample_categories": zero_sample_categories,
+        # Store classifier for later export
+        "classifier_model": model,
+        "classifier_index_to_category": index_to_category,
     }

@@ -23,7 +23,8 @@
       {
         "group": "Advanced Topics",
         "pages": [
-          "class-imbalance"
+          "class-imbalance",
+          "classifier-workflow"
         ]
       },
       {

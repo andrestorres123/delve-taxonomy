@@ -261,6 +261,68 @@ print(f"Augmented samples: {result.metadata.get('augmented_count', 0)}")
 See the [Handling Class Imbalance](/class-imbalance) guide for a complete explanation of these metrics and how to tune them.
 </Tip>
 
+## Production Workflow: Train Once, Classify Many
+
+For cost-effective production use, train a classifier once and reuse it for new documents without LLM costs.
+
+### Step 1: Initial Run and Export
+
+```python
+from delve import Delve, Verbosity
+
+# Run taxonomy generation
+delve = Delve(sample_size=200, verbosity=Verbosity.VERBOSE)
+result = delve.run_sync("training_data.csv", text_column="content")
+
+# Save the classifier for later
+result.save_classifier("classifier.joblib")
+
+# Export labeled docs for review
+await result.export()  # Creates labeled_documents.csv
+```
+
+### Step 2: Human Review (Optional)
+
+Review `labeled_documents.csv` and correct mislabeled documents, focusing on "Other" categories and edge cases.
+
+### Step 3: Retrain from Corrected Data
+
+```python
+# Train improved classifier from corrected labels
+result = Delve.train_from_labeled(
+    "corrected_labels.csv",
+    text_column="content",
+    label_column="category",
+    taxonomy="taxonomy.json",  # Use original taxonomy
+)
+
+print(f"Improved Test F1: {result.metrics['test_f1']:.2%}")
+result.save_classifier("production_classifier.joblib")
+```
+
+### Step 4: Production Classification
+
+```python
+# Classify new documents with no LLM cost
+predictions = Delve.classify(
+    "new_documents.csv",
+    classifier_path="production_classifier.joblib",
+    text_column="content",
+)
+
+# Access results
+for doc in predictions.documents:
+    print(f"{doc.id}: {doc.category} ({doc.confidence:.2%})")
+
+# Export as DataFrame
+df = predictions.to_dataframe()
+df.to_csv("classified_documents.csv", index=False)
+```
+
+<Tip>
+See the [Classifier Export & Training](/classifier-workflow) guide for complete documentation on saving, loading, and training classifiers.
+</Tip>
+
 ## Running Examples
 
 ```bash
