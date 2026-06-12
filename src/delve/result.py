@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -239,8 +239,8 @@ class DelveResult:
             >>> result = delve.run_sync("data.csv", text_column="text")
             >>> result.save_classifier("my_classifier.joblib")
         """
-        from delve.core.classifier import ClassifierBundle, save_bundle
         import delve
+        from delve.core.classifier import ClassifierBundle, save_bundle
 
         if self._classifier_model is None:
             raise ValueError(
@@ -480,8 +480,8 @@ class TrainingResult:
         Returns:
             Path to saved classifier bundle
         """
-        from delve.core.classifier import ClassifierBundle, save_bundle
         import delve
+        from delve.core.classifier import ClassifierBundle, save_bundle
 
         # Determine embedding dimensions
         embedding_dims = 3072

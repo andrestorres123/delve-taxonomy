@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 from jsonpath_ng import parse
 
@@ -73,7 +73,7 @@ class JSONAdapter(DataSource):
 
         # Try to parse the file
         try:
-            with open(self.file_path, "r", encoding=self.encoding) as f:
+            with open(self.file_path, encoding=self.encoding) as f:
                 if self.is_jsonl:
                     # JSONL: try to parse first line
                     first_line = f.readline()
@@ -148,7 +148,7 @@ class JSONAdapter(DataSource):
 
         # Read and parse file
         try:
-            with open(self.file_path, "r", encoding=self.encoding) as f:
+            with open(self.file_path, encoding=self.encoding) as f:
                 if self.is_jsonl:
                     # JSONL: parse line by line
                     data = []

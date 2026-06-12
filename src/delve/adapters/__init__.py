@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union, Optional, Any
+from typing import Optional, Union
 
 import pandas as pd
 
 from delve.adapters.base import DataSource, DataSourceConfig
 from delve.adapters.csv_adapter import CSVAdapter
+from delve.adapters.dataframe_adapter import DataFrameAdapter
 from delve.adapters.json_adapter import JSONAdapter
 from delve.adapters.langsmith_adapter import LangSmithAdapter
-from delve.adapters.dataframe_adapter import DataFrameAdapter
 
 
 def create_adapter(
@@ -21,7 +21,7 @@ def create_adapter(
     source_type: Optional[str] = None,
     **kwargs,
 ) -> DataSource:
-    """Factory function to create the appropriate adapter for a data source.
+    """Create the appropriate adapter for a data source.
 
     Automatically detects the source type based on:
     - File extension (.csv, .json, .jsonl)
@@ -116,7 +116,7 @@ def create_adapter(
 
     elif source_type == "dataframe":
         if not isinstance(source, pd.DataFrame):
-            raise ValueError(f"Source must be a pandas DataFrame for dataframe adapter")
+            raise ValueError("Source must be a pandas DataFrame for dataframe adapter")
         if not text_column:
             raise ValueError("text_column is required for DataFrame adapter")
         return DataFrameAdapter(

@@ -6,19 +6,23 @@ Uses a hybrid approach:
 3. Returns all labeled documents
 """
 
-import re
 from collections import Counter
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
+
 import numpy as np
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import OpenAIEmbeddings
 
-from delve.state import State, Doc
-from delve.utils import load_chat_model
 from delve.configuration import Configuration
+from delve.core.classifier import (
+    get_prediction_confidence,
+    predict_with_classifier,
+    train_classifier,
+)
 from delve.prompts import LABELER_PROMPT
-from delve.core.classifier import train_classifier, predict_with_classifier, get_prediction_confidence
+from delve.schemas import CategoryLabel
+from delve.state import Doc, State
+from delve.utils import load_chat_model
 
 
 def _get_category_name_by_id(category_id: str, taxonomy: List[Dict[str, str]]) -> str:
@@ -46,31 +50,13 @@ def _get_category_name_by_id(category_id: str, taxonomy: List[Dict[str, str]]) -
     )
 
 
-def _parse_labels(output_text: str, console=None) -> Dict[str, str]:
-    """Parse the generated category ID from LLM output."""
-    # Extract category ID from <category_id>N</category_id> tags
-    id_matches = re.findall(
-        r"<category_id>\s*(\d+)\s*</category_id>",
-        output_text,
-        re.DOTALL,
-    )
-
-    if not id_matches:
-        # Fallback: try to find any number in the output
-        if console:
-            console.warning(f"No <category_id> tag found in output: {output_text[:200]}")
-        return {"category_id": None}
-
-    if len(id_matches) > 1:
-        if console:
-            console.warning(f"Multiple category IDs found: {id_matches}, using first one")
-
-    return {"category_id": id_matches[0]}
+def _label_dict(result: CategoryLabel) -> Dict[str, Optional[str]]:
+    """Convert the structured label output to the dict shape used downstream."""
+    return {"category_id": result.category_id}
 
 
 def _format_taxonomy(clusters: List[Dict[str, str]]) -> str:
     """Format taxonomy clusters as XML."""
-
     xml = "<cluster_table>\n"
 
     if clusters and isinstance(clusters[0], list):
@@ -100,9 +86,8 @@ def _setup_classification_chain(configuration: Configuration):
 
     return (
         LABELER_PROMPT
-        | model
-        | StrOutputParser()
-        | _parse_labels
+        | model.with_structured_output(CategoryLabel)
+        | _label_dict
     ).with_config(run_name="LabelDocs")
 
 
@@ -462,7 +447,7 @@ async def label_documents(
         f"Classifier trained - Test F1: {metrics['test_f1']:.3f}, "
         f"Test Accuracy: {metrics['test_accuracy']:.3f}"
     )
-    console.debug(f"Classifier metrics detail:")
+    console.debug("Classifier metrics detail:")
     console.debug(f"  Train Accuracy: {metrics['train_accuracy']:.3f}, Train F1: {metrics['train_f1']:.3f}")
     console.debug(f"  Test Accuracy: {metrics['test_accuracy']:.3f}, Test F1: {metrics['test_f1']:.3f}")
 

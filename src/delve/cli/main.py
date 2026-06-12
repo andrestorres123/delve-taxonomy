@@ -6,15 +6,15 @@ from typing import Optional
 import click
 
 from delve import Delve, __version__
+from delve.cli.utils import detect_source_type, print_summary, validate_file
 from delve.console import Console, Verbosity
-from delve.cli.utils import validate_file, detect_source_type, print_summary
 from delve.utils import validate_all_api_keys
 
 
 @click.group()
 @click.version_option(version=__version__)
 def cli():
-    """Delve - AI-powered taxonomy generation for your data.
+    r"""Delve - AI-powered taxonomy generation for your data.
 
     Generate taxonomies and automatically categorize your documents
     using state-of-the-art language models.
@@ -58,12 +58,12 @@ def cli():
 )
 @click.option(
     "--model",
-    default="anthropic/claude-sonnet-4-5-20250929",
+    default="anthropic/claude-opus-4-8",
     help="Main LLM model for reasoning",
 )
 @click.option(
     "--fast-llm",
-    default="anthropic/claude-haiku-4-5-20251001",
+    default="anthropic/claude-haiku-4-5",
     help="Fast LLM for summarization",
 )
 @click.option(
@@ -143,7 +143,7 @@ def run(
     quiet: bool,
     verbose: int,
 ):
-    """Run taxonomy generation on DATA_SOURCE.
+    r"""Run taxonomy generation on DATA_SOURCE.
 
     DATA_SOURCE can be:
       - Path to CSV file (e.g., data.csv)
@@ -168,7 +168,7 @@ def run(
       \b
       # Custom configuration
       delve run data.csv --text-column text --sample-size 200 \\
-        --model anthropic/claude-opus-4 --output-dir ./output
+        --model anthropic/claude-opus-4-8 --output-dir ./output
     """
     # Determine verbosity level
     if quiet:
@@ -252,7 +252,7 @@ def run(
     # Run taxonomy generation
     try:
         # Show startup info in verbose mode
-        console.info(f"Starting taxonomy generation...")
+        console.info("Starting taxonomy generation...")
         console.info(f"  Source: {data_source}")
         console.info(f"  Model: {model}")
         console.info(f"  Sample size: {sample_size}")

@@ -1,15 +1,14 @@
 """Utility & helper functions."""
 
 import os
-import re
-import random
-from typing import List, Optional, Dict, Any, Union, Sequence
-from langchain_core.runnables import Runnable, RunnableConfig
+from typing import Dict, List, Optional, Union
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables import Runnable, RunnableConfig
 
+from delve.schemas import TaxonomyCluster
 from delve.state import Doc, State
 
 
@@ -32,10 +31,10 @@ def validate_api_key() -> None:
     # Basic validation - check if it looks like an Anthropic key
     if not api_key.startswith("sk-ant-"):
         raise ValueError(
-            f"ANTHROPIC_API_KEY appears to be invalid.\n\n"
-            f"Anthropic API keys should start with 'sk-ant-'.\n"
-            f"Please check your API key and try again.\n\n"
-            f"You can get a new API key from: https://console.anthropic.com/"
+            "ANTHROPIC_API_KEY appears to be invalid.\n\n"
+            "Anthropic API keys should start with 'sk-ant-'.\n"
+            "Please check your API key and try again.\n\n"
+            "You can get a new API key from: https://console.anthropic.com/"
         )
 
 
@@ -59,10 +58,10 @@ def validate_openai_api_key() -> None:
     # Basic validation - check if it looks like an OpenAI key
     if not (api_key.startswith("sk-") or api_key.startswith("sess-")):
         raise ValueError(
-            f"OPENAI_API_KEY appears to be invalid.\n\n"
-            f"OpenAI API keys typically start with 'sk-'.\n"
-            f"Please check your API key and try again.\n\n"
-            f"You can get a new API key from: https://platform.openai.com/api-keys"
+            "OPENAI_API_KEY appears to be invalid.\n\n"
+            "OpenAI API keys typically start with 'sk-'.\n"
+            "Please check your API key and try again.\n\n"
+            "You can get a new API key from: https://platform.openai.com/api-keys"
         )
 
 
@@ -125,7 +124,7 @@ def load_chat_model(fully_specified_name: str) -> BaseChatModel:
     except ValueError:
         raise ValueError(
             f"Invalid model name format: '{fully_specified_name}'\n"
-            f"Expected format: 'provider/model-name' (e.g., 'anthropic/claude-sonnet-4-5-20250929')"
+            f"Expected format: 'provider/model-name' (e.g., 'anthropic/claude-opus-4-8')"
         )
     
     try:
@@ -246,21 +245,9 @@ TAXONOMY_CONFIG = {
 }
 
 
-def parse_taxa(output_text: str) -> Dict[str, List[Dict[str, str]]]:
-    """Extract the taxonomy from the generated output."""
-    
-    cluster_matches = re.findall(
-        r"\s*<id>(.*?)</id>\s*<name>(.*?)</name>\s*<description>(.*?)</description>\s*",
-        output_text,
-        re.DOTALL,
-    )
-    
-    clusters = [
-        {"id": id.strip(), "name": name.strip(), "description": description.strip()}
-        for id, name, description in cluster_matches
-    ]
-    
-    return {"clusters": clusters}
+def clusters_to_dict(clusters: List[TaxonomyCluster]) -> Dict[str, List[Dict[str, str]]]:
+    """Convert structured-output clusters to the dict shape used in state."""
+    return {"clusters": [cluster.model_dump() for cluster in clusters]}
 
 
 def format_docs(docs: List[Doc]) -> str:

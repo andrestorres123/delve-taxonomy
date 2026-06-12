@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Annotated, Any, List, Optional, Dict
 import operator
+from dataclasses import dataclass, field
+from typing import Annotated, Any, Dict, List, Optional
 
 from langgraph.managed import IsLastStep
 

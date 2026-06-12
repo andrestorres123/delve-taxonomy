@@ -1,38 +1,28 @@
 """Node for reviewing and finalizing taxonomies."""
 
 import random
-from langchain_core.output_parsers import StrOutputParser
+
 from langchain_core.runnables import RunnableConfig
 
-from delve.state import State
-from delve.utils import load_chat_model, parse_taxa, invoke_taxonomy_chain
 from delve.configuration import Configuration
-from langsmith import Client
+from delve.prompts import TAXONOMY_REVIEW_PROMPT
+from delve.schemas import TaxonomyReview
+from delve.state import State
+from delve.utils import clusters_to_dict, invoke_taxonomy_chain, load_chat_model
 
 
 def _setup_review_chain(configuration: Configuration):
     """Set up the chain for taxonomy review.
-    
-    Args:
-        model_name: Name of the model to use
-        max_tokens: Maximum tokens for model response
-        
+
     Returns:
-        Chain for reviewing and parsing taxonomies
+        Chain for reviewing taxonomies.
     """
-    client = Client()
-
-    # Initialize the prompt
-    review_prompt = client.pull_prompt("wfh/tnt-llm-taxonomy-review")
-
-    # Create the chain
     model = load_chat_model(configuration.fast_llm)
 
     return (
-        review_prompt
-        | model
-        | StrOutputParser()
-        | parse_taxa
+        TAXONOMY_REVIEW_PROMPT
+        | model.with_structured_output(TaxonomyReview)
+        | (lambda result: clusters_to_dict(result.clusters))
     ).with_config(run_name="ReviewTaxonomy")
 
 
@@ -45,8 +35,6 @@ async def review_taxonomy(
     Args:
         state: Current application state
         config: Configuration for the run
-        model_name: Name of the model to use
-        max_tokens: Maximum tokens for model response
         
     Returns:
         dict: Updated state fields with reviewed taxonomy

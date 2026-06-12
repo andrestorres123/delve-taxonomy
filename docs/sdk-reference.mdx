@@ -33,8 +33,8 @@ print(result.labeled_documents)
 
 ```python
 delve = Delve(
-    model="anthropic/claude-sonnet-4-5-20250929",
-    fast_llm="anthropic/claude-haiku-4-5-20251001",
+    model="anthropic/claude-opus-4-8",
+    fast_llm="anthropic/claude-haiku-4-5",
     sample_size=100,
     batch_size=200,
     max_num_clusters=5,
@@ -50,25 +50,25 @@ delve = Delve(
 
 ## Configuration Options
 
-<ParamField path="model" type="string" default="anthropic/claude-sonnet-4-5-20250929">
+<ParamField path="model" type="string" default="anthropic/claude-opus-4-8">
   Main LLM model for taxonomy generation and reasoning.
 
   ```python
-  delve = Delve(model="anthropic/claude-opus-4")
+  delve = Delve(model="anthropic/claude-opus-4-8")
   ```
 
   Supported models:
-  - `anthropic/claude-sonnet-4-5-20250929` (recommended)
-  - `anthropic/claude-opus-4` (most capable)
-  - `anthropic/claude-haiku-4-5-20251001` (fastest/cheapest)
+  - `anthropic/claude-opus-4-8` (recommended)
+  - `anthropic/claude-opus-4-8` (most capable)
+  - `anthropic/claude-haiku-4-5` (fastest/cheapest)
   - Any model supported by LiteLLM
 </ParamField>
 
-<ParamField path="fast_llm" type="string" default="anthropic/claude-haiku-4-5-20251001">
+<ParamField path="fast_llm" type="string" default="anthropic/claude-haiku-4-5">
   Faster model for document summarization to reduce costs.
 
   ```python
-  delve = Delve(fast_llm="anthropic/claude-haiku-4-5-20251001")
+  delve = Delve(fast_llm="anthropic/claude-haiku-4-5")
   ```
 
   Use a faster, cheaper model for the summarization step.
@@ -446,8 +446,8 @@ result.metadata = {
     "num_categories": 10,           # Number of taxonomy categories
     "sample_size": 100,             # Configured sample size
     "batch_size": 200,              # Configured batch size
-    "model": "anthropic/claude-sonnet-4-5-20250929",
-    "fast_llm": "anthropic/claude-haiku-4-5-20251001",
+    "model": "anthropic/claude-opus-4-8",
+    "fast_llm": "anthropic/claude-haiku-4-5",
 
     # Timing
     "run_duration_seconds": 145.32, # Total processing time
