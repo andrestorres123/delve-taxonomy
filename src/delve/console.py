@@ -37,7 +37,7 @@ class Console:
         self._rich_console: Optional[RichConsole] = None
         self._current_status: Optional[Status] = None
 
-    def _get_rich(self) -> "RichConsole":
+    def _get_rich(self) -> RichConsole:
         """Lazily initialize and return the rich console."""
         if self._rich_console is None:
             from rich.console import Console as RichConsole
@@ -46,7 +46,7 @@ class Console:
         return self._rich_console
 
     @contextmanager
-    def status(self, message: str) -> Generator[Optional["Status"], None, None]:
+    def status(self, message: str) -> Generator[Optional[Status], None, None]:
         """Show spinner during operation.
 
         Args:

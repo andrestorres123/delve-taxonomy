@@ -3,13 +3,13 @@
 import json
 import random
 from pathlib import Path
-from typing import List, Union, Dict, Optional
-from langchain_core.runnables import RunnableConfig
+from typing import Dict, List, Union
 
 import pandas as pd
+from langchain_core.runnables import RunnableConfig
 
-from delve.state import State, Doc
 from delve.configuration import Configuration
+from delve.state import State
 
 
 def _load_predefined_taxonomy(taxonomy_input: Union[str, List[Dict[str, str]]]) -> List[Dict[str, str]]:

@@ -1,15 +1,14 @@
 """Embedding-based classifier for document labeling at scale."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.utils import class_weight
-from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 from delve.state import Doc
 
@@ -155,7 +154,7 @@ def train_classifier(
     # Debug: Show class distribution
     if console:
         console.debug(f"Training set: {len(y)} samples, {len(unique)} classes")
-        console.debug(f"Class distribution:")
+        console.debug("Class distribution:")
         for cls_idx, count in zip(unique, counts):
             cls_name = index_to_category.get(cls_idx, f"Unknown({cls_idx})")
             console.debug(f"  [{cls_idx}] {cls_name}: {count} samples")

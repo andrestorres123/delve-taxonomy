@@ -1,37 +1,26 @@
 """Node for updating taxonomies based on new document batches."""
 
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 
-from delve.state import State
-from delve.utils import load_chat_model, parse_taxa, invoke_taxonomy_chain
 from delve.configuration import Configuration
-from langsmith import Client
+from delve.prompts import TAXONOMY_UPDATE_PROMPT
+from delve.schemas import TaxonomyReview
+from delve.state import State
+from delve.utils import clusters_to_dict, invoke_taxonomy_chain, load_chat_model
 
 
 def _setup_update_chain(configuration: Configuration):
     """Set up the chain for taxonomy updates.
-    
-    Args:
-        model_name: Name of the model to use
-        max_tokens: Maximum tokens for model response
-        
+
     Returns:
-        Chain for updating and parsing taxonomies
+        Chain for updating taxonomies.
     """
-    # Initialize the promptclient = Client()
-    client = Client()
-
-    update_prompt = client.pull_prompt("wfh/tnt-llm-taxonomy-update")
-
-    # Create the chain
     model = load_chat_model(configuration.fast_llm)
 
     return (
-        update_prompt
-        | model
-        | StrOutputParser()
-        | parse_taxa
+        TAXONOMY_UPDATE_PROMPT
+        | model.with_structured_output(TaxonomyReview)
+        | (lambda result: clusters_to_dict(result.clusters))
     ).with_config(run_name="UpdateTaxonomy")
 
 
@@ -44,8 +33,6 @@ async def update_taxonomy(
     Args:
         state: Current application state
         config: Configuration for the run
-        model_name: Name of the model to use
-        max_tokens: Maximum tokens for model response
         
     Returns:
         dict: Updated state fields with revised taxonomy

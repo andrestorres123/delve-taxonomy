@@ -1,11 +1,17 @@
 """Delve: AI-powered taxonomy generation for your data."""
 
 from delve.client import Delve
-from delve.console import Console, Verbosity
-from delve.state import Doc
 from delve.configuration import Configuration
-from delve.result import DelveResult, TaxonomyCategory, ClassificationResult, TrainingResult, MatchResult
+from delve.console import Console, Verbosity
 from delve.core.classifier import ClassifierBundle
+from delve.result import (
+    ClassificationResult,
+    DelveResult,
+    MatchResult,
+    TaxonomyCategory,
+    TrainingResult,
+)
+from delve.state import Doc
 
 __version__ = "0.1.12"
 

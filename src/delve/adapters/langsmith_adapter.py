@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta
-from typing import List, Union, Dict, Optional
+from typing import Dict, List, Optional, Union
 
 from langsmith import Client
 from langsmith.schemas import Run

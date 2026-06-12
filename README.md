@@ -82,7 +82,7 @@ for doc in result.matched_documents[:5]:
 
 ## Features
 
-- **Automated Taxonomy Generation** - No manual category creation using Claude 3.5 Sonnet
+- **Automated Taxonomy Generation** - No manual category creation — powered by the latest Claude models
 - **Binary Detection** - Fast, cheap single-category filtering with `find_matches()`
 - **Multiple Data Sources** - CSV, JSON/JSONL, LangSmith runs, pandas DataFrames
 - **Smart Categorization** - Iterative refinement with minibatch clustering

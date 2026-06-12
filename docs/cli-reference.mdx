@@ -72,24 +72,24 @@ delve run DATA_SOURCE [OPTIONS]
 
 ### Model Options
 
-<ParamField path="--model" type="string" default="anthropic/claude-sonnet-4-5-20250929">
+<ParamField path="--model" type="string" default="anthropic/claude-opus-4-8">
   Main LLM model for taxonomy generation and reasoning.
 
   ```bash
-  delve run data.csv --text-column text --model anthropic/claude-opus-4
+  delve run data.csv --text-column text --model anthropic/claude-sonnet-4-6
   ```
 
   Supported models:
-  - `anthropic/claude-sonnet-4-5-20250929` (default)
-  - `anthropic/claude-opus-4`
+  - `anthropic/claude-opus-4-8` (default)
+  - `anthropic/claude-sonnet-4-6`
   - Any model supported by LiteLLM
 </ParamField>
 
-<ParamField path="--fast-llm" type="string" default="anthropic/claude-haiku-4-5-20251001">
+<ParamField path="--fast-llm" type="string" default="anthropic/claude-haiku-4-5">
   Fast LLM model for document summarization.
 
   ```bash
-  delve run data.csv --text-column text --fast-llm anthropic/claude-haiku-4-5-20251001
+  delve run data.csv --text-column text --fast-llm anthropic/claude-haiku-4-5
   ```
 
   Use a faster, cheaper model for summarization to reduce costs.
@@ -261,8 +261,8 @@ Labeling documents with LLM ━━━━━━━━━━━━━━━━ 100
 ```
 ==================================================
 Delve Configuration:
-  Model: anthropic/claude-sonnet-4-5-20250929
-  Fast LLM: anthropic/claude-haiku-4-5-20251001
+  Model: anthropic/claude-opus-4-8
+  Fast LLM: anthropic/claude-haiku-4-5
   Sample size: 100
   Batch size: 200
   Embedding model: text-embedding-3-large
@@ -342,7 +342,7 @@ Complete taxonomy with category descriptions and metadata:
   "metadata": {
     "num_documents": 100,
     "num_categories": 5,
-    "model": "anthropic/claude-sonnet-4-5-20250929",
+    "model": "anthropic/claude-opus-4-8",
     "timestamp": "2024-01-15T10:30:00Z"
   }
 }

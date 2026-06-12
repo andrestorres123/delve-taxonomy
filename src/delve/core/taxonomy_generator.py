@@ -1,12 +1,13 @@
 """Node for generating taxonomies from document batches."""
 
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableConfig
 
-from delve.state import State
-from delve.utils import load_chat_model, parse_taxa, invoke_taxonomy_chain
 from delve.configuration import Configuration
 from delve.prompts import TAXONOMY_GENERATION_PROMPT
+from delve.schemas import TaxonomyGeneration
+from delve.state import State
+from delve.utils import clusters_to_dict, invoke_taxonomy_chain, load_chat_model
+
 
 def _setup_taxonomy_chain(configuration: Configuration, feedback: str, use_case: str):
     """Set up the chain for taxonomy generation."""
@@ -23,9 +24,8 @@ def _setup_taxonomy_chain(configuration: Configuration, feedback: str, use_case:
 
     return (
         taxonomy_prompt
-        | model
-        | StrOutputParser()
-        | parse_taxa
+        | model.with_structured_output(TaxonomyGeneration)
+        | (lambda result: clusters_to_dict(result.clusters))
     ).with_config(run_name="GenerateTaxonomy")
 
 

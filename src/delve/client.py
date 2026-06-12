@@ -6,22 +6,22 @@ import asyncio
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
+from delve.adapters import create_adapter
 from delve.configuration import Configuration
 from delve.console import Console, Verbosity
-from delve.result import (
-    DelveResult,
-    ClassificationResult,
-    TrainingResult,
-    TaxonomyCategory,
-    MatchResult,
-)
-from delve.adapters import create_adapter
 from delve.graph import graph
-from delve.state import State, Doc
+from delve.result import (
+    ClassificationResult,
+    DelveResult,
+    MatchResult,
+    TaxonomyCategory,
+    TrainingResult,
+)
+from delve.state import Doc, State
 from delve.utils import validate_all_api_keys
 
 
@@ -39,7 +39,7 @@ class Delve:
 
         >>> # With custom configuration
         >>> delve = Delve(
-        ...     model="anthropic/claude-sonnet-4-5-20250929",
+        ...     model="anthropic/claude-opus-4-8",
         ...     sample_size=200,
         ...     output_dir="./my_results"
         ... )
@@ -48,7 +48,7 @@ class Delve:
 
     def __init__(
         self,
-        model: str = "anthropic/claude-sonnet-4-5-20250929",
+        model: str = "anthropic/claude-opus-4-8",
         fast_llm: Optional[str] = None,
         sample_size: int = 100,
         batch_size: int = 200,
@@ -98,7 +98,7 @@ class Delve:
         """
         self.config = Configuration(
             model=model,
-            fast_llm=fast_llm or "anthropic/claude-haiku-4-5-20251001",
+            fast_llm=fast_llm or "anthropic/claude-haiku-4-5",
             sample_size=sample_size,
             batch_size=batch_size,
             use_case=use_case or "Generate taxonomy for categorizing document content",
@@ -191,7 +191,7 @@ class Delve:
         self,
         docs: List[Doc],
     ) -> DelveResult:
-        """Synchronous wrapper for run_with_docs().
+        """Run run_with_docs() synchronously.
 
         Args:
             docs: List of Doc objects to process
@@ -207,7 +207,7 @@ class Delve:
         """
         # Check if we're in a Jupyter/Colab environment with existing event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             # No event loop running, use asyncio.run()
             return asyncio.run(self.run_with_docs(docs))
@@ -378,7 +378,7 @@ class Delve:
         source_type: Optional[str] = None,
         **adapter_kwargs,
     ) -> DelveResult:
-        """Synchronous wrapper for run().
+        """Run run() synchronously.
 
         This is a convenience method for users who don't want to deal
         with async/await syntax. Works in Jupyter/Colab environments.
@@ -400,7 +400,7 @@ class Delve:
         """
         # Check if we're in a Jupyter/Colab environment with existing event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             # No event loop running, use asyncio.run()
             return asyncio.run(
@@ -484,10 +484,11 @@ class Delve:
             ...     print(f"{doc.id}: {doc.category} ({doc.confidence:.2%})")
         """
         from langchain_openai import OpenAIEmbeddings
+
         from delve.core.classifier import (
+            get_prediction_confidence,
             load_bundle,
             predict_with_classifier,
-            get_prediction_confidence,
         )
 
         console = Console(verbosity)
@@ -641,7 +642,8 @@ class Delve:
             >>> result.save_classifier("my_classifier.joblib")
         """
         from langchain_openai import OpenAIEmbeddings
-        from delve.core.classifier import train_classifier, _infer_taxonomy_from_labels
+
+        from delve.core.classifier import _infer_taxonomy_from_labels, train_classifier
         from delve.core.data_loader import _load_predefined_taxonomy
 
         console = Console(verbosity)

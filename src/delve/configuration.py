@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Annotated, Optional, List, Union, Dict
+from typing import TYPE_CHECKING, Annotated, Dict, List, Optional, Union
 
 from langchain_core.runnables import RunnableConfig, ensure_config
 
-from delve.console import Console, NullConsole, Verbosity
+from delve.console import Console, Verbosity
 
 if TYPE_CHECKING:
     pass
@@ -18,7 +18,7 @@ class Configuration:
     """The configuration for the Delve taxonomy generator."""
 
     model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default="anthropic/claude-sonnet-4-5-20250929",
+        default="anthropic/claude-opus-4-8",
         metadata={
             "description": "The name of the language model to use for the agent's main interactions. "
             "Should be in the form: provider/model-name."
@@ -26,7 +26,7 @@ class Configuration:
     )
 
     fast_llm: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default="anthropic/claude-haiku-4-5-20251001",
+        default="anthropic/claude-haiku-4-5",
         metadata={
             "description": "A faster, lighter model for tasks like summarization. "
             "Should be in the form: provider/model-name."

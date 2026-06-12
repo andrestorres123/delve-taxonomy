@@ -13,9 +13,9 @@ The main model handles the "thinking" tasks: taxonomy generation, iterative refi
 
 | Model | Strengths | Best For |
 |-------|-----------|----------|
-| `anthropic/claude-sonnet-4-5-20250929` | Excellent balance of capability and cost | Default choice, most use cases |
-| `anthropic/claude-opus-4` | Highest reasoning capability | Complex domains, nuanced categories |
-| `anthropic/claude-haiku-4-5-20251001` | Fast and cheap | Quick iterations, simple data |
+| `anthropic/claude-opus-4-8` | Highest reasoning capability | Default choice, most use cases |
+| `anthropic/claude-sonnet-4-6` | Strong balance of capability and cost | Cost-sensitive runs on large corpora |
+| `anthropic/claude-haiku-4-5` | Fast and cheap | Quick iterations, simple data |
 
 **How it affects results:**
 - **More capable models** → Better category definitions, more nuanced distinctions
@@ -23,10 +23,10 @@ The main model handles the "thinking" tasks: taxonomy generation, iterative refi
 
 ```python
 # High-quality taxonomy for complex data
-delve = Delve(model="anthropic/claude-opus-4")
+delve = Delve(model="anthropic/claude-sonnet-4-6")
 
 # Quick iteration during development
-delve = Delve(model="anthropic/claude-haiku-4-5-20251001")
+delve = Delve(model="anthropic/claude-haiku-4-5")
 ```
 
 <Tip>
@@ -44,10 +44,10 @@ The fast LLM handles high-volume tasks: document summarization and individual do
 
 ```python
 # Default: fast and cost-effective
-delve = Delve(fast_llm="anthropic/claude-haiku-4-5-20251001")
+delve = Delve(fast_llm="anthropic/claude-haiku-4-5")
 
 # Higher quality labeling at higher cost
-delve = Delve(fast_llm="anthropic/claude-sonnet-4-5-20250929")
+delve = Delve(fast_llm="anthropic/claude-opus-4-8")
 ```
 
 <Info>
@@ -425,7 +425,7 @@ delve = Delve(
     sample_size=50,
     batch_size=50,
     max_num_clusters=5,
-    fast_llm="anthropic/claude-haiku-4-5-20251001",
+    fast_llm="anthropic/claude-haiku-4-5",
     verbosity=Verbosity.NORMAL,
 )
 ```
@@ -446,7 +446,7 @@ delve = Delve(
 
 ```python
 delve = Delve(
-    model="anthropic/claude-opus-4",
+    model="anthropic/claude-opus-4-8",
     sample_size=300,
     batch_size=75,
     max_num_clusters=15,
@@ -463,7 +463,7 @@ delve = Delve(
     sample_size=100,
     batch_size=200,
     max_num_clusters=8,
-    fast_llm="anthropic/claude-haiku-4-5-20251001",
+    fast_llm="anthropic/claude-haiku-4-5",
     embedding_model="text-embedding-3-small",
     classifier_confidence_threshold=0.0,
     verbosity=Verbosity.QUIET,

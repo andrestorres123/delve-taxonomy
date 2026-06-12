@@ -1,11 +1,12 @@
 """Node for generating minibatches from documents."""
 
 import random
-from typing import List, Dict
+from typing import List
+
 from langchain_core.runnables import RunnableConfig
 
-from delve.state import State
 from delve.configuration import Configuration
+from delve.state import State
 
 
 def _create_batches(indices: List[int], batch_size: int) -> List[List[int]]:
