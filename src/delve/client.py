@@ -144,10 +144,13 @@ class Delve:
         start_time = time.time()
 
         # Validate API keys early
-        # OpenAI key needed if sample_size > 0 (classifier uses embeddings)
-        needs_openai = self.config.sample_size > 0 and len(docs) > self.config.sample_size
+        # Embeddings (OpenAI) are needed only when the classifier runs on a subset
+        needs_embeddings = self.config.sample_size > 0 and len(docs) > self.config.sample_size
         try:
-            validate_all_api_keys(needs_openai=needs_openai)
+            validate_all_api_keys(
+                [self.config.model, self.config.fast_llm],
+                needs_embeddings=needs_embeddings,
+            )
         except ValueError as e:
             self.console.error(str(e))
             raise
@@ -290,10 +293,13 @@ class Delve:
         self.console.debug("=" * 50)
 
         # 0. Validate API keys before starting
-        # Check for OpenAI key if sample_size > 0 (might need embeddings for classifier)
-        # We check conservatively since we don't know doc count yet
+        # Embeddings (OpenAI) may be needed for the classifier when sampling.
+        # We check conservatively since we don't know the doc count yet.
         try:
-            validate_all_api_keys(needs_openai=(self.config.sample_size > 0))
+            validate_all_api_keys(
+                [self.config.model, self.config.fast_llm],
+                needs_embeddings=(self.config.sample_size > 0),
+            )
         except ValueError as e:
             self.console.error(str(e))
             raise
