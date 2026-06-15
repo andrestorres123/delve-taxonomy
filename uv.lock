@@ -313,7 +313,7 @@ toml = [
 
 [[package]]
 name = "delve-taxonomy"
-version = "0.1.12"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
