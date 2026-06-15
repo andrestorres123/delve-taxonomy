@@ -212,11 +212,11 @@ def run(
         sys.exit(1)
 
     # Validate API keys early - before any processing starts
-    # OpenAI key is needed if sample_size > 0 (classifier uses embeddings)
-    # If sample_size is 0, all docs are labeled by LLM, no embeddings needed
+    # Required keys are derived from the model providers; embeddings (OpenAI)
+    # are needed only when sample_size > 0 (classifier path).
     try:
         with console.status("Validating API keys..."):
-            validate_all_api_keys(needs_openai=(sample_size > 0))
+            validate_all_api_keys([model, fast_llm], needs_embeddings=(sample_size > 0))
         console.success("API keys validated")
     except ValueError as e:
         console.error("Missing or invalid API keys")

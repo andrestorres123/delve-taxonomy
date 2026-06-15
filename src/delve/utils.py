@@ -1,7 +1,7 @@
 """Utility & helper functions."""
 
 import os
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
@@ -65,30 +65,47 @@ def validate_openai_api_key() -> None:
         )
 
 
-def validate_all_api_keys(needs_openai: bool = True) -> None:
-    """Validate all required API keys upfront.
+def validate_all_api_keys(
+    models: Iterable[str], needs_embeddings: bool = True
+) -> None:
+    """Validate the API keys required by the configured providers.
+
+    The required keys are derived from the ``provider/model`` strings in use,
+    so an OpenAI-only run does not require an Anthropic key and vice versa.
 
     Args:
-        needs_openai: Whether OpenAI key is needed (for embeddings/classifier).
-                     Set to False if sample_size=0 (all docs labeled by LLM).
+        models: Fully specified model strings ('provider/model') used in the run.
+        needs_embeddings: Whether OpenAI embeddings are needed (classifier path).
+            Embeddings always run on OpenAI, so this forces an OpenAI key check.
 
     Raises:
         ValueError: If any required API key is missing or invalid.
     """
+    providers = {
+        m.split("/", 1)[0].lower()
+        for m in models
+        if m and "/" in m
+    }
+    if needs_embeddings:
+        # Embeddings are generated via OpenAI regardless of the chat provider.
+        providers.add("openai")
+
     errors = []
 
-    # Check Anthropic key (always required)
-    try:
-        validate_api_key()
-    except ValueError as e:
-        errors.append(str(e))
+    if "anthropic" in providers:
+        try:
+            validate_api_key()
+        except ValueError as e:
+            errors.append(str(e))
 
-    # Check OpenAI key (needed for classifier/embeddings)
-    if needs_openai:
+    if "openai" in providers:
         try:
             validate_openai_api_key()
         except ValueError as e:
             errors.append(str(e))
+
+    # Other providers (e.g. fireworks) are left to the provider SDK to validate
+    # at call time, since their key formats are not checked here.
 
     if errors:
         separator = "\n" + "=" * 50 + "\n"
