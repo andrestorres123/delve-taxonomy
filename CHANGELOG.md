@@ -5,6 +5,36 @@ All notable changes to Delve will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-15
+
+### Changed
+
+- **BREAKING: `requires-python` is now `>=3.11`** (was `>=3.9`). The LangChain
+  1.x stack requires Python 3.10+; 3.11 matches the tested/CI range.
+- **Default models updated** to `anthropic/claude-opus-4-8` (main) and
+  `anthropic/claude-haiku-4-5` (fast).
+- **All LLM calls use structured outputs** (schema-enforced JSON) instead of
+  regex/XML parsing, removing a class of silent parse failures.
+- **TNT-LLM prompts are vendored in the repo** instead of being pulled from
+  LangSmith Hub at runtime — no network access or LangSmith account needed.
+- **Dependencies hardened**: the LangChain stack is pinned to the 1.x line and
+  capped below the next major; `pandas` and `scikit-learn` capped below their
+  next majors; unused `langchain-fireworks` and `langchain-community` removed.
+
+### Added
+
+- **Provider-aware API key validation** — required keys are derived from the
+  `provider/model` strings, so an OpenAI-only run needs only `OPENAI_API_KEY`.
+- **Reproducible builds**: committed `uv.lock`; CI installs with `uv sync --frozen`.
+- **Release automation**: tag-triggered PyPI publishing via OIDC trusted
+  publishing, guarded so the tag must match the package version.
+
+### Fixed
+
+- Full static-type pass: `mypy` is clean and now a blocking CI gate.
+
+---
+
 ## [0.1.8] - 2025-12-16
 
 ### Changed
