@@ -175,7 +175,7 @@ class LangSmithAdapter(DataSource):
         self.max_runs = max_runs
         self.sample_size = sample_size
         self.filter_expr = filter_expr
-        self.client = None
+        self.client: Optional[Client] = None
 
     def validate(self) -> bool:
         """Validate LangSmith connection and project access.
@@ -214,6 +214,7 @@ class LangSmithAdapter(DataSource):
         """
         # Validate first
         self.validate()
+        assert self.client is not None  # validate() initializes the client
 
         # Calculate lookback time
         delta_days = datetime.now() - timedelta(days=self.days)

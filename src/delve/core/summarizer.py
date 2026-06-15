@@ -33,12 +33,12 @@ def _get_content(state: Dict[str, List]) -> List[Dict[str, str]]:
     ]
 
 
-def _summary_dict(result: DocumentSummary) -> dict:
+def _summary_dict(result: Any) -> dict:
     """Convert the structured summary output to the dict shape used downstream."""
     return {"summary": result.summary, "explanation": result.explanation}
 
 
-def _reduce_summaries(combined: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+def _reduce_summaries(combined: Dict[str, Any]) -> Dict[str, Any]:
     """Combine documents with their summaries.
 
     Args:
@@ -93,7 +93,7 @@ async def generate_summaries(
     summary_chain = (
         summary_prompt
         | model.with_structured_output(DocumentSummary)
-        | _summary_dict
+        | RunnableLambda(_summary_dict)
     ).with_config(run_name="GenerateSummary")
 
     # Create the full chain with map-reduce

@@ -1,7 +1,7 @@
 """Command-line interface for Delve."""
 
 import sys
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import click
 
@@ -242,7 +242,7 @@ def run(
     )
 
     # Prepare adapter kwargs
-    adapter_kwargs = {}
+    adapter_kwargs: Dict[str, Any] = {}
     if source_type == "langsmith":
         adapter_kwargs["api_key"] = langsmith_key
         adapter_kwargs["days"] = days

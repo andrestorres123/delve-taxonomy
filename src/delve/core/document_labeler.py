@@ -7,10 +7,10 @@ Uses a hybrid approach:
 """
 
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_openai import OpenAIEmbeddings
 
 from delve.configuration import Configuration
@@ -50,7 +50,7 @@ def _get_category_name_by_id(category_id: str, taxonomy: List[Dict[str, str]]) -
     )
 
 
-def _label_dict(result: CategoryLabel) -> Dict[str, Optional[str]]:
+def _label_dict(result: Any) -> Dict[str, Optional[str]]:
     """Convert the structured label output to the dict shape used downstream."""
     return {"category_id": result.category_id}
 
@@ -87,7 +87,7 @@ def _setup_classification_chain(configuration: Configuration):
     return (
         LABELER_PROMPT
         | model.with_structured_output(CategoryLabel)
-        | _label_dict
+        | RunnableLambda(_label_dict)
     ).with_config(run_name="LabelDocs")
 
 
@@ -95,7 +95,7 @@ def _find_similar_documents(
     query_embeddings: np.ndarray,
     pool_embeddings: np.ndarray,
     k: int,
-    exclude_indices: set = None,
+    exclude_indices: Optional[set[int]] = None,
 ) -> List[int]:
     """Find k most similar documents using cosine similarity.
 
@@ -161,7 +161,7 @@ async def _balance_sample(
     all_category_names = [cat["name"] for cat in taxonomy]
 
     # Find underrepresented categories
-    underrepresented = []
+    underrepresented: List[Dict[str, Any]] = []
     for cat_name in all_category_names:
         current_count = sample_dist.get(cat_name, 0)
         if current_count < min_per_cat:
@@ -194,12 +194,12 @@ async def _balance_sample(
         pool_embeddings = np.array(await encoder.aembed_documents(pool_contents))
 
     augmented_docs = []
-    used_indices = set()
+    used_indices: set[int] = set()
     taxonomy_xml = _format_taxonomy(taxonomy)
 
     for cat_info in underrepresented:
-        cat_name = cat_info["name"]
-        needed = cat_info["needed"]
+        cat_name = str(cat_info["name"])
+        needed = int(cat_info["needed"])
 
         # Get exemplars for this category
         exemplars = [d for d in llm_labeled_docs if d.category == cat_name]

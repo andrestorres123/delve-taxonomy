@@ -18,6 +18,8 @@ class Doc:
     explanation: Optional[str] = None
     category: Optional[str] = None
     confidence: Optional[float] = None
+    semantic_score: Optional[float] = None
+    keyword_score: Optional[float] = None
 
 
 @dataclass

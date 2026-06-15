@@ -122,7 +122,7 @@ def train_classifier(
 
     # Prepare training data
     X = np.array(embeddings)
-    y = []
+    y: Any = []
     for doc in labeled_docs:
         if doc.category not in category_to_index:
             # Skip documents with invalid categories (e.g., "Other")
