@@ -38,8 +38,6 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check src/
       - name: Type-check with mypy
-        # Non-blocking until the codebase is fully typed (45 pre-existing errors).
-        continue-on-error: true
         run: uv run mypy src/
       - name: Check spelling
         uses: codespell-project/actions-codespell@v2

@@ -6,7 +6,7 @@ import asyncio
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, cast
 
 import pandas as pd
 
@@ -343,7 +343,7 @@ class Delve:
 
         with self.console.status(status_msg):
             result_state = await graph.ainvoke(
-                initial_state,
+                cast(State, initial_state),
                 config={"configurable": self.config.to_dict()},
             )
 
@@ -523,6 +523,7 @@ class Delve:
                 bundle.model, embeddings, bundle.index_to_category
             )
 
+            confidences: Sequence[Optional[float]]
             if include_confidence:
                 confidences = get_prediction_confidence(bundle.model, embeddings)
             else:
@@ -945,7 +946,10 @@ class Delve:
             labeled_docs.append(labeled_doc)
 
         # Sort by score descending
-        labeled_docs.sort(key=lambda d: d.confidence, reverse=True)
+        labeled_docs.sort(
+            key=lambda d: d.confidence if d.confidence is not None else 0.0,
+            reverse=True,
+        )
 
         console.success(
             f"Found {match_count} matches out of {len(docs)} documents "

@@ -125,7 +125,7 @@ class Console:
     @contextmanager
     def progress(
         self, total: int, description: str
-    ) -> Generator[Callable[[int], None], None, None]:
+    ) -> Generator[Callable[..., None], None, None]:
         """Show progress bar (VERBOSE+) or spinner (NORMAL).
 
         Args:
@@ -156,13 +156,25 @@ class Console:
                 console=self._get_rich(),
             ) as progress:
                 task = progress.add_task(description, total=total)
-                yield lambda n=1: progress.advance(task, n)
+
+                def advance(n: int = 1) -> None:
+                    progress.advance(task, n)
+
+                yield advance
         elif self.verbosity >= Verbosity.NORMAL:
             # Just show spinner, no bar
             with self.status(description):
-                yield lambda n=1: None  # No-op advance
+
+                def noop(n: int = 1) -> None:  # No-op advance
+                    pass
+
+                yield noop
         else:
-            yield lambda n=1: None  # Silent
+
+            def silent(n: int = 1) -> None:  # Silent
+                pass
+
+            yield silent
 
     def print(self, message: str = "") -> None:
         """Print a message (NORMAL+).

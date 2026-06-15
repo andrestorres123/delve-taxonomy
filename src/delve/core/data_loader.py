@@ -3,7 +3,7 @@
 import json
 import random
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 import pandas as pd
 from langchain_core.runnables import RunnableConfig
@@ -12,7 +12,7 @@ from delve.configuration import Configuration
 from delve.state import State
 
 
-def _load_predefined_taxonomy(taxonomy_input: Union[str, List[Dict[str, str]]]) -> List[Dict[str, str]]:
+def _load_predefined_taxonomy(taxonomy_input: Union[str, Path, List[Dict[str, str]]]) -> List[Dict[str, str]]:
     """Load taxonomy from file or dict.
 
     Args:
@@ -34,7 +34,7 @@ def _load_predefined_taxonomy(taxonomy_input: Union[str, List[Dict[str, str]]]) 
                 )
         return taxonomy_input
 
-    if isinstance(taxonomy_input, str):
+    if isinstance(taxonomy_input, (str, Path)):
         # Load from file
         path = Path(taxonomy_input)
 
@@ -110,7 +110,7 @@ async def load_data(state: State, config: RunnableConfig) -> dict:
         status_message = f"Processing all {len(all_docs)} documents"
 
     # Check for predefined taxonomy
-    result = {
+    result: Dict[str, Any] = {
         "documents": sampled_docs,
         "use_case": configuration.use_case,  # Pass use_case to state
         "status": [status_message],

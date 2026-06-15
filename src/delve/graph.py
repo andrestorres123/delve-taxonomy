@@ -15,7 +15,7 @@ from delve.routing import should_discover_taxonomy, should_review
 from delve.state import InputState, State
 
 # Create the graph
-builder = StateGraph(State, input=InputState, config_schema=Configuration)
+builder = StateGraph(State, input_schema=InputState, context_schema=Configuration)
 
 # Add nodes
 builder.add_node("load_data", load_data)

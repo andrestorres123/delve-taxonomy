@@ -50,7 +50,7 @@ class DelveResult:
         state: Union[State, Dict[str, Any]],
         config: Configuration,
         run_duration: float = 0.0,
-        source_info: Dict[str, Any] = None,
+        source_info: Optional[Dict[str, Any]] = None,
     ) -> DelveResult:
         """Create result from graph state.
 
@@ -242,7 +242,7 @@ class DelveResult:
         import delve
         from delve.core.classifier import ClassifierBundle, save_bundle
 
-        if self._classifier_model is None:
+        if self._classifier_model is None or self._classifier_index_to_category is None:
             raise ValueError(
                 "No classifier available to save. This happens when all documents "
                 "were labeled by the LLM (sample_size >= total documents). "
@@ -448,12 +448,12 @@ class MatchResult:
         """
         import numpy as np
 
-        scores = [doc.confidence for doc in self.documents]
+        scores = [doc.confidence for doc in self.documents if doc.confidence is not None]
         counts, edges = np.histogram(scores, bins=bins, range=(0, 1))
         return {
             "bin_edges": edges.tolist(),
             "counts": counts.tolist(),
-            "total": len(scores),
+            "total": len(self.documents),
             "matches": len(self.matched_documents),
         }
 
