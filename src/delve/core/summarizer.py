@@ -12,6 +12,29 @@ from delve.state import State
 from delve.utils import load_chat_model
 
 
+def _normalize_doc(doc: Any) -> Dict[str, str]:
+    """Normalize one document to a ``{"id", "content"}`` dict for summarization.
+
+    Handles the three shapes that can reach the summarizer:
+      * ``str`` — raw text, gets a fresh id;
+      * ``dict`` — used as-is, gets a fresh id if missing;
+      * ``Doc`` (or any object with a ``.content`` attribute) — fields are read
+        off the object.
+
+    The last case is the common one: ``state.documents`` is a ``List[Doc]``.
+    Stringifying a ``Doc`` (``str(doc)``) would poison ``content`` with the full
+    ``Doc(...)`` repr, which then flows into summaries, classifier embeddings, and
+    CSV exports. Pulling ``.content`` off the object avoids that.
+    """
+    if isinstance(doc, str):
+        return {"id": str(uuid4()), "content": doc}
+    if isinstance(doc, dict):
+        return {"id": doc.get("id") or str(uuid4()), "content": doc.get("content", "")}
+    if hasattr(doc, "content"):
+        return {"id": getattr(doc, "id", None) or str(uuid4()), "content": doc.content}
+    return {"id": str(uuid4()), "content": str(doc)}
+
+
 def _get_content(state: Dict[str, List]) -> List[Dict[str, str]]:
     """Extract content from documents for summarization.
 
@@ -106,16 +129,7 @@ async def generate_summaries(
     )
 
     # Process documents
-    processed_docs = []
-    for doc in state.documents:
-        if isinstance(doc, str):
-            processed_docs.append({"id": str(uuid4()), "content": doc})
-        elif isinstance(doc, dict):
-            if "id" not in doc:
-                doc["id"] = str(uuid4())
-            processed_docs.append(doc)
-        else:
-            processed_docs.append({"id": str(uuid4()), "content": str(doc)})
+    processed_docs = [_normalize_doc(doc) for doc in state.documents]
 
     try:
         return await map_reduce_chain.ainvoke({"documents": processed_docs})
