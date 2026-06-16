@@ -65,5 +65,5 @@ class State(InputState, OutputState):
     zero_sample_categories: List[str] = field(default_factory=list)
 
     # Classifier storage for export
-    classifier_model: Optional[Any] = None  # RandomForestClassifier
+    classifier_model: Optional[Any] = None  # trained classifier
     classifier_index_to_category: Optional[Dict[int, str]] = None

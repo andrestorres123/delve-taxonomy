@@ -64,6 +64,7 @@ class Delve:
         max_num_clusters: int = 5,
         min_examples_per_category: int = 0,
         sampling_strategy: str = "random",
+        classifier: str = "logistic",
     ):
         """Initialize Delve client.
 
@@ -95,6 +96,9 @@ class Delve:
                 If a category has fewer samples, Delve will find more via embedding similarity.
                 Set to 0 to disable (default).
             sampling_strategy: Sampling strategy: 'random' (default) or 'stratified'.
+            classifier: Classifier for scaling labeling beyond the LLM-labeled sample:
+                'logistic' (LogisticRegression, default) or 'random_forest'
+                (the pre-0.2.1 default, kept for backwards compatibility).
         """
         self.config = Configuration(
             model=model,
@@ -113,6 +117,7 @@ class Delve:
             max_num_clusters=max_num_clusters,
             min_examples_per_category=min_examples_per_category,
             sampling_strategy=sampling_strategy,
+            classifier=classifier,
         )
         self.console = self.config.get_console()
 

@@ -5,6 +5,31 @@ All notable changes to Delve will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-16
+
+### Fixed
+
+- **Document content pollution in the summarizer**: `Doc` objects (the normal
+  shape of `state.documents`) fell through to `str(doc)`, so every document's
+  `content` became the full `Doc(...)` repr. That noise flowed into summaries,
+  the embeddings the classifier trains on, and CSV exports. Content is now read
+  directly off the object. Extracted a testable `_normalize_doc()` helper and
+  added regression tests (the summarizer previously had none).
+
+### Changed
+
+- **Default classifier is now `LogisticRegression`** (was `RandomForestClassifier`).
+  On dense embeddings it is more accurate and faster to train/predict. The
+  previous behavior is available with `Delve(classifier="random_forest")`.
+
+### Added
+
+- **`classifier` option** on `Delve(...)` / `Configuration`: `"logistic"`
+  (default) or `"random_forest"`. Both expose `predict_proba`, so the
+  confidence-threshold logic works with either.
+
+---
+
 ## [0.2.0] - 2026-06-15
 
 ### Changed

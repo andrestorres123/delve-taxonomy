@@ -141,6 +141,16 @@ class Configuration:
         },
     )
 
+    classifier: str = field(
+        default="logistic",
+        metadata={
+            "description": "Classifier used to scale labeling beyond the LLM-labeled sample: "
+            "'logistic' (LogisticRegression, default — higher accuracy on embeddings) or "
+            "'random_forest' (RandomForestClassifier, the pre-0.2.1 default, kept for "
+            "backwards compatibility)."
+        },
+    )
+
     def __post_init__(self) -> None:
         """Initialize console based on verbosity."""
         # Create console if not provided
@@ -199,5 +209,6 @@ class Configuration:
             "max_num_clusters": self.max_num_clusters,
             "min_examples_per_category": self.min_examples_per_category,
             "sampling_strategy": self.sampling_strategy,
+            "classifier": self.classifier,
             "console": self.console,
         }

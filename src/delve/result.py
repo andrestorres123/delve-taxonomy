@@ -462,7 +462,7 @@ class MatchResult:
 class TrainingResult:
     """Results from training a classifier from labeled data."""
 
-    model: Any  # RandomForestClassifier
+    model: Any  # trained classifier (LogisticRegression or RandomForestClassifier)
     index_to_category: Dict[int, str]
     taxonomy: List[TaxonomyCategory]
     metrics: Dict[str, Any]

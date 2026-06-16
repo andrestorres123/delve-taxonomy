@@ -292,7 +292,7 @@ async def label_documents(
     Strategy:
     1. LLM labels sampled documents (state.documents)
     2. If more documents exist in state.all_documents:
-       - Train RandomForest classifier on embeddings
+       - Train a classifier on embeddings
        - Use classifier to label remaining documents
     3. Return all labeled documents
     """
@@ -435,12 +435,13 @@ async def label_documents(
         training_embeddings = await encoder.aembed_documents(training_contents)
 
     # Train classifier
-    with console.status("Training RandomForest classifier..."):
+    with console.status(f"Training {configuration.classifier} classifier..."):
         model, index_to_category, metrics = train_classifier(
             llm_labeled_docs,
             training_embeddings,
             latest_clusters,
             console=console,
+            classifier_type=configuration.classifier,
         )
 
     console.success(

@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+from sklearn.base import ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.model_selection import train_test_split
 from sklearn.utils import class_weight
@@ -15,6 +17,48 @@ from delve.state import Doc
 if TYPE_CHECKING:
     from delve.console import Console
 
+# Registered classifiers, keyed by the value of Configuration.classifier.
+# Both expose predict_proba, which the confidence-threshold logic relies on.
+CLASSIFIERS = ("logistic", "random_forest")
+
+
+def _make_classifier(
+    classifier_type: str, class_weight_dict: Dict[int, float]
+) -> ClassifierMixin:
+    """Build a fresh, untrained classifier of the requested type.
+
+    Args:
+        classifier_type: One of ``CLASSIFIERS``.
+        class_weight_dict: Per-class weights to handle imbalance.
+
+    Returns:
+        An unfitted scikit-learn classifier.
+
+    Raises:
+        ValueError: If ``classifier_type`` is not recognized.
+    """
+    if classifier_type == "logistic":
+        # Strong default for dense embeddings: higher accuracy than RandomForest
+        # and faster to train/predict. Has predict_proba for confidence scoring.
+        # (No n_jobs: it has no effect for the default solver and is being removed
+        # from LogisticRegression in scikit-learn 1.10.)
+        return LogisticRegression(
+            class_weight=class_weight_dict,
+            max_iter=2000,
+            random_state=42,
+        )
+    if classifier_type == "random_forest":
+        # Pre-0.2.1 default, kept for backwards compatibility.
+        return RandomForestClassifier(
+            class_weight=class_weight_dict,
+            n_estimators=100,
+            random_state=42,
+            n_jobs=-1,
+        )
+    raise ValueError(
+        f"Unknown classifier '{classifier_type}'. Expected one of {CLASSIFIERS}."
+    )
+
 
 @dataclass
 class ClassifierBundle:
@@ -23,7 +67,7 @@ class ClassifierBundle:
     This bundle can be serialized to disk with joblib and loaded later to
     classify new documents without any LLM calls.
     """
-    model: RandomForestClassifier
+    model: ClassifierMixin
     index_to_category: Dict[int, str]
     embedding_model: str
     embedding_dimensions: int
@@ -104,14 +148,17 @@ def train_classifier(
     embeddings: List[List[float]],
     taxonomy: List[Dict[str, str]],
     console: Optional["Console"] = None,
-) -> Tuple[RandomForestClassifier, Dict[int, str], Dict[str, float]]:
-    """Train a RandomForest classifier on labeled documents.
+    classifier_type: str = "logistic",
+) -> Tuple[ClassifierMixin, Dict[int, str], Dict[str, float]]:
+    """Train a classifier on labeled documents.
 
     Args:
         labeled_docs: Documents with LLM-assigned categories
         embeddings: Embeddings for the labeled documents
         taxonomy: List of category dicts with 'id', 'name', 'description'
         console: Optional Console instance for output
+        classifier_type: Which classifier to train (one of ``CLASSIFIERS``).
+            Defaults to 'logistic'.
 
     Returns:
         Tuple of (trained model, index_to_category mapping, metrics dict)
@@ -177,13 +224,8 @@ def train_classifier(
     )
     class_weight_dict = dict(zip(unique_classes, class_weights))
 
-    # Train RandomForest
-    model = RandomForestClassifier(
-        class_weight=class_weight_dict,
-        n_estimators=100,
-        random_state=42,
-        n_jobs=-1  # Use all CPU cores
-    )
+    # Train the requested classifier
+    model = _make_classifier(classifier_type, class_weight_dict)
     model.fit(X_train, y_train)
 
     # Evaluate
@@ -210,14 +252,14 @@ def train_classifier(
 
 
 def predict_with_classifier(
-    model: RandomForestClassifier,
+    model: ClassifierMixin,
     embeddings: List[List[float]],
     index_to_category: Dict[int, str],
 ) -> List[str]:
     """Predict categories using the trained classifier.
 
     Args:
-        model: Trained RandomForest classifier
+        model: Trained classifier
         embeddings: Document embeddings
         index_to_category: Mapping from class index to category name
 
@@ -230,13 +272,13 @@ def predict_with_classifier(
 
 
 def get_prediction_confidence(
-    model: RandomForestClassifier,
+    model: ClassifierMixin,
     embeddings: List[List[float]],
 ) -> List[float]:
     """Get confidence scores for predictions.
 
     Args:
-        model: Trained RandomForest classifier
+        model: Trained classifier
         embeddings: Document embeddings
 
     Returns:

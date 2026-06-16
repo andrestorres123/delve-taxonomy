@@ -3,8 +3,11 @@
 import pytest
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 from delve.core.classifier import (
+    CLASSIFIERS,
+    _make_classifier,
     train_classifier,
     predict_with_classifier,
     get_prediction_confidence,
@@ -75,7 +78,7 @@ class TestClassifier:
         )
 
         # Check model type
-        assert isinstance(model, RandomForestClassifier)
+        assert isinstance(model, LogisticRegression)  # 'logistic' is the default
 
         # Check index mapping
         assert len(index_to_category) == 3
@@ -124,7 +127,7 @@ class TestClassifier:
             docs_with_invalid[:16], sample_embeddings[:16], sample_taxonomy
         )
 
-        assert isinstance(model, RandomForestClassifier)
+        assert isinstance(model, LogisticRegression)  # 'logistic' is the default
         assert len(index_to_category) == 3
 
     def test_train_classifier_no_valid_docs(self, sample_embeddings, sample_taxonomy):
@@ -193,6 +196,53 @@ class TestClassifier:
         # Should train successfully with class weighting
         model, index_to_category, metrics = train_classifier(docs, embeddings, sample_taxonomy)
 
-        assert isinstance(model, RandomForestClassifier)
+        assert isinstance(model, LogisticRegression)  # 'logistic' is the default
         # Model should use balanced class weights
         assert hasattr(model, 'class_weight')
+
+
+class TestClassifierSelection:
+    """Tests for the configurable classifier (logistic default, RF for back-compat)."""
+
+    def _data(self):
+        rng = np.random.RandomState(0)
+        taxonomy = [
+            {"id": "1", "name": "Bug", "description": "bug"},
+            {"id": "2", "name": "Feature", "description": "feature"},
+            {"id": "3", "name": "Docs", "description": "docs"},
+        ]
+        docs, embeddings = [], []
+        for ci, cat in enumerate(["Bug", "Feature", "Docs"]):
+            for _ in range(4):  # >=2 per class so stratified split works
+                docs.append(Doc(id=f"d{len(docs)}", content="x", category=cat))
+                embeddings.append((rng.rand(8) + ci).tolist())  # separable by class
+        return docs, embeddings, taxonomy
+
+    def test_make_classifier_logistic(self):
+        assert isinstance(_make_classifier("logistic", {0: 1.0}), LogisticRegression)
+
+    def test_make_classifier_random_forest(self):
+        assert isinstance(_make_classifier("random_forest", {0: 1.0}), RandomForestClassifier)
+
+    def test_make_classifier_unknown_raises(self):
+        with pytest.raises(ValueError, match="Unknown classifier"):
+            _make_classifier("xgboost", {0: 1.0})
+
+    def test_train_default_is_logistic(self):
+        docs, embeddings, taxonomy = self._data()
+        model, _, _ = train_classifier(docs, embeddings, taxonomy)
+        assert isinstance(model, LogisticRegression)
+
+    def test_train_random_forest_back_compat(self):
+        docs, embeddings, taxonomy = self._data()
+        model, _, _ = train_classifier(docs, embeddings, taxonomy, classifier_type="random_forest")
+        assert isinstance(model, RandomForestClassifier)
+
+    def test_both_classifiers_support_predict_proba(self):
+        # The confidence-threshold logic depends on predict_proba for either choice.
+        docs, embeddings, taxonomy = self._data()
+        for kind in CLASSIFIERS:
+            model, idx, _ = train_classifier(docs, embeddings, taxonomy, classifier_type=kind)
+            conf = get_prediction_confidence(model, embeddings[:2])
+            assert len(conf) == 2
+            assert all(0 <= c <= 1 for c in conf)
