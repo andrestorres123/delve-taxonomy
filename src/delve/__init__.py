@@ -13,7 +13,7 @@ from delve.result import (
 )
 from delve.state import Doc
 
-__version__ = "0.1.12"
+__version__ = "0.2.1"
 
 __all__ = [
     "Delve",

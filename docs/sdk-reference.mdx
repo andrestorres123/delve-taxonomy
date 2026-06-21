@@ -44,7 +44,11 @@ delve = Delve(
     verbosity=Verbosity.NORMAL,  # SILENT, QUIET, NORMAL, VERBOSE, DEBUG
     predefined_taxonomy=None,  # Use existing taxonomy instead of generating
     embedding_model="text-embedding-3-large",
-    classifier_confidence_threshold=0.0
+    classifier="logistic",  # "logistic" (default) or "random_forest"
+    classifier_confidence_threshold=0.0,
+    low_confidence_action="other",  # "other", "llm", or "keep"
+    min_examples_per_category=0,
+    sampling_strategy="random",
 )
 ```
 
@@ -58,8 +62,8 @@ delve = Delve(
   ```
 
   Supported models:
-  - `anthropic/claude-opus-4-8` (recommended)
-  - `anthropic/claude-opus-4-8` (most capable)
+  - `anthropic/claude-opus-4-8` (default, most capable)
+  - `anthropic/claude-sonnet-4-6` (balanced cost/capability)
   - `anthropic/claude-haiku-4-5` (fastest/cheapest)
   - Any model supported by LiteLLM
 </ParamField>
@@ -193,11 +197,52 @@ delve = Delve(
   ```
 </ParamField>
 
-<ParamField path="classifier_confidence_threshold" type="float" default="0.0">
-  Minimum confidence for classifier predictions. Documents below this threshold fall back to LLM labeling. Set to 0 to use classifier for all documents (no fallback).
+<ParamField path="classifier" type="string" default="logistic">
+  Which scikit-learn classifier to train on the embeddings when scaling labeling beyond the LLM-labeled sample (`0 < sample_size < total documents`).
+
+  - `"logistic"` (default) — `LogisticRegression`; higher accuracy on dense embeddings, faster to train/predict.
+  - `"random_forest"` — `RandomForestClassifier`; the pre-0.2.1 default, kept for backwards compatibility.
 
   ```python
-  delve = Delve(classifier_confidence_threshold=0.8)  # Use LLM for low-confidence docs
+  delve = Delve(sample_size=150, classifier="random_forest")
+  ```
+
+  Both expose `predict_proba`, so confidence thresholding works either way. See the [Configuration Guide](/configuration-guide#classifier-classifier-algorithm).
+</ParamField>
+
+<ParamField path="classifier_confidence_threshold" type="float" default="0.0">
+  Minimum confidence for classifier predictions. Documents below this threshold are handled by `low_confidence_action`. Set to 0 to use the classifier for all documents (no fallback).
+
+  ```python
+  delve = Delve(classifier_confidence_threshold=0.8)  # Flag low-confidence docs
+  ```
+</ParamField>
+
+<ParamField path="low_confidence_action" type="string" default="other">
+  What to do with predictions below `classifier_confidence_threshold` (only applies when the threshold is `> 0`):
+
+  - `"other"` (default) — label as the "Other" category.
+  - `"llm"` — re-label with the LLM (capped at 20 docs; falls back to `"other"` beyond that).
+  - `"keep"` — keep the classifier's best-guess prediction.
+
+  ```python
+  delve = Delve(classifier_confidence_threshold=0.7, low_confidence_action="other")
+  ```
+</ParamField>
+
+<ParamField path="min_examples_per_category" type="integer" default="0">
+  Minimum training examples per category. Categories below this get topped up via embedding-similarity search + LLM labeling. `0` disables augmentation (default). See the [Class Imbalance guide](/class-imbalance).
+
+  ```python
+  delve = Delve(min_examples_per_category=5)
+  ```
+</ParamField>
+
+<ParamField path="sampling_strategy" type="string" default="random">
+  How documents are selected for the initial sample: `"random"` (default) or `"stratified"` (reserved for future use).
+
+  ```python
+  delve = Delve(sampling_strategy="random")
   ```
 </ParamField>
 
@@ -369,6 +414,101 @@ for doc in result.matched_documents[:5]:
 
 <Info>
   Binary detection is much faster (~2-4 min for 30K docs) and cheaper (~$1-2) than full taxonomy generation. See [Binary Detection](/binary-detection) for full documentation.
+</Info>
+
+The returned `MatchResult` also exposes `score_histogram()` for inspecting the score distribution when tuning `threshold`.
+
+### classify() / classify_async()
+
+Class methods that label documents with a previously saved classifier bundle — **embeddings only, no LLM calls**.
+
+```python
+from delve import Delve
+
+predictions = Delve.classify(
+    "new_data.csv",
+    classifier_path="classifier.joblib",
+    text_column="text",
+)
+
+for doc in predictions.documents:
+    print(f"{doc.id}: {doc.category} ({doc.confidence:.0%})")
+```
+
+<ParamField path="data" type="str | Path | DataFrame | List[Doc]" required>
+  Documents to classify (CSV/JSON path, DataFrame, or a list of `Doc` objects).
+</ParamField>
+
+<ParamField path="classifier_path" type="str | Path" required>
+  Path to a `.joblib` bundle saved via `save_classifier()`.
+</ParamField>
+
+<ParamField path="text_column" type="string">
+  Column containing document text (required for CSV/DataFrame).
+</ParamField>
+
+<ParamField path="id_column" type="string">
+  Optional column for document IDs.
+</ParamField>
+
+<ParamField path="include_confidence" type="boolean" default="True">
+  Include per-document confidence scores in the result.
+</ParamField>
+
+**Returns:** `ClassificationResult` with `.documents`, `.to_dataframe()`, `.to_dict()`, and `.export()`.
+
+<Info>
+  Use the async variant `await Delve.classify_async(...)` inside an async context (e.g. Jupyter). The sync `classify()` needs `nest_asyncio` if called from a running event loop.
+</Info>
+
+### train_from_labeled() / train_from_labeled_async()
+
+Class methods that train a classifier directly from an already-labeled dataset — **embeddings only, no LLM calls**. Ideal for human-in-the-loop retraining on corrected labels.
+
+```python
+from delve import Delve
+
+result = Delve.train_from_labeled(
+    "labeled_data.csv",
+    text_column="text",
+    label_column="category",
+)
+print(f"Test F1: {result.metrics['test_f1']:.2%}")
+result.save_classifier("production_classifier.joblib")
+```
+
+<ParamField path="data" type="str | Path | DataFrame" required>
+  Labeled data source (CSV/JSON path or DataFrame).
+</ParamField>
+
+<ParamField path="text_column" type="string" required>
+  Column containing document text.
+</ParamField>
+
+<ParamField path="label_column" type="string" required>
+  Column containing the category labels.
+</ParamField>
+
+<ParamField path="id_column" type="string">
+  Optional column for document IDs.
+</ParamField>
+
+<ParamField path="taxonomy" type="str | Path | list | None" default="None">
+  Optional explicit taxonomy (file path or list of `{id, name, description}` dicts). If omitted, it's inferred from the unique labels.
+</ParamField>
+
+<ParamField path="embedding_model" type="string" default="text-embedding-3-large">
+  OpenAI embedding model used to vectorize the text.
+</ParamField>
+
+<ParamField path="test_size" type="float" default="0.2">
+  Fraction of data held out for validation metrics.
+</ParamField>
+
+**Returns:** `TrainingResult` with `.metrics`, `.training_docs_count`, `.validation_docs_count`, `.embedding_model`, and `.save_classifier()`.
+
+<Info>
+  This is the method the notebook uses to report classifier metrics. The trained model is a `LogisticRegression`; the selectable `classifier` parameter applies to full `Delve(...)` runs, not to `train_from_labeled`. See [Classifier Export & Training](/classifier-workflow) for the full workflow.
 </Info>
 
 ## Data Sources

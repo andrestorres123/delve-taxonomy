@@ -5,8 +5,8 @@ description: 'Install Delve and set up your environment'
 
 ## Requirements
 
-<Card title="Python 3.9+" icon="python">
-  Delve requires Python 3.9 or higher. Check your version with `python --version`
+<Card title="Python 3.11+" icon="python">
+  Delve requires Python 3.11 or higher. Check your version with `python --version`
 </Card>
 
 ## Installation Methods
@@ -49,16 +49,16 @@ description: 'Install Delve and set up your environment'
 
     **Using uv:**
     ```bash
-    git clone https://github.com/anthropics/delve.git
-    cd delve
+    git clone https://github.com/andrestorres123/delve-taxonomy.git
+    cd delve-taxonomy
     uv venv
     uv pip install -e .
     ```
 
     **Using pip:**
     ```bash
-    git clone https://github.com/anthropics/delve.git
-    cd delve
+    git clone https://github.com/andrestorres123/delve-taxonomy.git
+    cd delve-taxonomy
     python3 -m venv venv
     source venv/bin/activate  # On Windows: venv\Scripts\activate
     pip install -e .
@@ -220,13 +220,13 @@ delve --version
   </Accordion>
 
   <Accordion title="Python version too old">
-    Delve requires Python 3.9+. Upgrade your Python version:
+    Delve requires Python 3.11+. Upgrade your Python version:
 
     ```bash
     python --version  # Check current version
     ```
 
-    Install Python 3.9+ from [python.org](https://www.python.org/downloads/)
+    Install Python 3.11+ from [python.org](https://www.python.org/downloads/)
   </Accordion>
 </AccordionGroup>
 

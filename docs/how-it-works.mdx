@@ -29,7 +29,7 @@ Delve solves this by combining the best of both worlds:
 
 2. **Efficient Classifier-Based Labeling** (Supervised Phase)
    - LLM labels a representative sample with high accuracy
-   - Train a fast RandomForest classifier on embeddings
+   - Train a fast classifier on embeddings (LogisticRegression by default)
    - Classifier labels remaining documents at scale
 
 <Info>
@@ -105,7 +105,7 @@ If you provide a `predefined_taxonomy`, this phase loads it and the pipeline ski
 
 ### Phase 4: Initial Taxonomy Generation
 
-**What happens:** The main LLM (Claude Sonnet by default) analyzes the first minibatch and generates an initial taxonomy with up to `max_num_clusters` categories.
+**What happens:** The main LLM (Claude Opus by default) analyzes the first minibatch and generates an initial taxonomy with up to `max_num_clusters` categories.
 
 **Key constraints enforced:**
 - Categories must be orthogonal (non-overlapping)
@@ -143,7 +143,8 @@ This is where the **hybrid approach** shines:
 
 **Step 2: Classifier Training (if needed)**
 - If `sample_size < total documents`, embeddings are generated for all documents
-- A RandomForest classifier is trained on the LLM-labeled samples
+- A classifier is trained on the LLM-labeled samples (LogisticRegression by
+  default; switch to RandomForest via `classifier="random_forest"`)
 - The classifier learns to map embeddings to categories
 
 **Step 3: Classifier Inference**

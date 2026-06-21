@@ -69,8 +69,8 @@ class Delve:
         """Initialize Delve client.
 
         Args:
-            model: Main LLM model for reasoning (default: Claude 3.5 Sonnet)
-            fast_llm: Faster model for summarization (default: Claude 3 Haiku)
+            model: Main LLM model for reasoning (default: anthropic/claude-opus-4-8)
+            fast_llm: Faster model for summarization (default: anthropic/claude-haiku-4-5)
             sample_size: Number of documents to sample for LLM labeling.
                 If sample_size < total documents, trains a classifier to label the rest efficiently.
                 Set to 0 to process all documents.

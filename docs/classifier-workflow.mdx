@@ -32,7 +32,8 @@ result.save_classifier("classifier.joblib")
 ### What's Saved
 
 The `.joblib` bundle contains:
-- Trained RandomForest model
+- The trained classifier (LogisticRegression by default, or RandomForest if you
+  ran with `classifier="random_forest"`)
 - Category index mappings
 - Embedding model name (for consistency)
 - Full taxonomy with descriptions
@@ -180,11 +181,17 @@ Combine Delve's automation with human expertise:
 ```python
 from delve import Delve, Verbosity
 
-delve = Delve(sample_size=200, verbosity=Verbosity.VERBOSE)
+delve = Delve(
+    sample_size=200,
+    output_dir="./results",
+    output_formats=["csv", "json"],
+    verbosity=Verbosity.VERBOSE,
+)
 result = delve.run_sync("training_data.csv", text_column="content")
 
-# Export for human review
-await result.export()  # Creates labeled_documents.csv
+# run_sync already wrote the outputs (including labeled_data.csv) to output_dir,
+# ready for human review. To re-export from an async context, use:
+#   await result.export("./results")
 ```
 
 ### Step 2: Human Review
@@ -278,7 +285,7 @@ Returned by `Delve.train_from_labeled()`:
 ```python
 @dataclass
 class TrainingResult:
-    model: RandomForestClassifier
+    model: ClassifierMixin            # LogisticRegression (default) or RandomForestClassifier
     index_to_category: Dict[int, str]
     taxonomy: List[TaxonomyCategory]
     metrics: Dict[str, Any]          # train/test accuracy, F1, per_class_f1

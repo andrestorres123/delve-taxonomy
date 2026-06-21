@@ -22,7 +22,10 @@ The main model handles the "thinking" tasks: taxonomy generation, iterative refi
 - **Faster models** → Quicker iterations but potentially less refined taxonomies
 
 ```python
-# High-quality taxonomy for complex data
+# Highest-quality taxonomy for complex data (default)
+delve = Delve(model="anthropic/claude-opus-4-8")
+
+# Cost-sensitive runs on large corpora
 delve = Delve(model="anthropic/claude-sonnet-4-6")
 
 # Quick iteration during development
@@ -30,7 +33,7 @@ delve = Delve(model="anthropic/claude-haiku-4-5")
 ```
 
 <Tip>
-Start with Claude Sonnet (default) and only upgrade to Opus if you need more nuanced category distinctions. The quality difference is often subtle for straightforward categorization tasks.
+Start with Claude Opus (the default) for the best category distinctions. If cost matters more than nuance on a large corpus, drop down to `anthropic/claude-sonnet-4-6` — the quality difference is often subtle for straightforward categorization tasks.
 </Tip>
 
 ### `fast_llm` - Summarization & Labeling Model
@@ -191,6 +194,29 @@ delve = Delve(embedding_model="text-embedding-3-small")
 
 <Info>
 The difference in classifier accuracy between embedding models is usually small (1-3%). For most use cases, the default is fine.
+</Info>
+
+### `classifier` - Classifier Algorithm
+
+**What it controls:** Which scikit-learn model is trained on the embeddings to scale labeling beyond the LLM-labeled sample. Only relevant when a classifier is trained (`0 < sample_size < total documents`).
+
+**Available options:**
+
+| Value | Model | Notes |
+|-------|-------|-------|
+| `"logistic"` (default) | `LogisticRegression` | Higher accuracy on dense embeddings and faster to train/predict |
+| `"random_forest"` | `RandomForestClassifier` | The pre-0.2.1 default, kept for backwards compatibility |
+
+```python
+# LogisticRegression (default) - recommended
+delve = Delve(sample_size=150, classifier="logistic")
+
+# RandomForest - legacy behavior
+delve = Delve(sample_size=150, classifier="random_forest")
+```
+
+<Info>
+Both classifiers expose `predict_proba`, so `classifier_confidence_threshold` and `low_confidence_action` work the same way regardless of which you choose. LogisticRegression is the default because it generally beats RandomForest on high-dimensional embedding vectors.
 </Info>
 
 ### `classifier_confidence_threshold` - Uncertainty Handling
@@ -482,7 +508,7 @@ result.save_classifier("my_classifier.joblib")
 ```
 
 The saved bundle includes:
-- The trained RandomForest model
+- The trained classifier (LogisticRegression by default)
 - Category mappings
 - Embedding model configuration
 - Training metrics for reference

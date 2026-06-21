@@ -56,18 +56,18 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/aitorress/delve-taxonomy"
+        "href": "https://github.com/andrestorres123/delve-taxonomy"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://github.com/aitorress/delve-taxonomy#quick-start"
+      "href": "https://github.com/andrestorres123/delve-taxonomy#quick-start"
     }
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/aitorress/delve-taxonomy"
+      "github": "https://github.com/andrestorres123/delve-taxonomy"
     }
   }
 }
